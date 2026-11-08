@@ -1,0 +1,30 @@
+name: Publish Windows release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Match tag to app version
+        shell: pwsh
+        run: |
+          [xml]$project = Get-Content Source/DeskBridge.csproj
+          $expected = 'v' + $project.Project.PropertyGroup.Version
+          if ($env:GITHUB_REF_NAME -ne $expected) { throw "Tag must be $expected" }
+      - name: Build release files
+        shell: pwsh
+        run: ./scripts/publish.ps1
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME artifacts/DeskBridge-win-x64.exe artifacts/DeskBridge-win-x64.exe.sha256 artifacts/DeskBridge-Windows-x64.zip --verify-tag --title "DeskBridge $env:GITHUB_REF_NAME" --generate-notes --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed.' }
