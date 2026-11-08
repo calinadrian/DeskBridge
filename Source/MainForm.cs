@@ -11,8 +11,13 @@ internal sealed class MainForm : Form
     readonly RadioButton receive=new() { Text="Receive control on this device", AutoSize=true };
     readonly TextBox address=new() { PlaceholderText="Legion Go address, e.g. 192.168.1.42", Dock=DockStyle.Fill };
     readonly TextBox code=new() { Multiline=true, Height=76, Dock=DockStyle.Fill, ScrollBars=ScrollBars.Vertical };
-    readonly ComboBox side=new() { DropDownStyle=ComboBoxStyle.DropDownList, Width=150 };
+    readonly Button arrange=new() { Text="Arrange monitors…", AutoSize=true };
+    readonly Label layoutSummary=new() { AutoSize=true, MaximumSize=new Size(580,0) };
     readonly CheckBox edges=new() { Text="Switch when the pointer reaches the screen edge", Checked=true, AutoSize=true };
+    readonly CheckBox fullscreen=new() { Text="Pause edge switching in fullscreen apps and games", Checked=true, AutoSize=true };
+    readonly CheckBox lockLocal=new() { Text="Lock control to this PC (for games)", AutoSize=true };
+    readonly CheckBox relative=new() { Text="Relative mouse for remote games — switch with shortcut only", AutoSize=true };
+    Preferences preferences=Preferences.Load();
     readonly Button action=new() { Text="Connect", AutoSize=true, MinimumSize=new Size(170,42) };
     readonly Button stop=new() { Text="Disconnect", AutoSize=true, Enabled=false, MinimumSize=new Size(130,42) };
     readonly Button copy=new() { Text="Copy pairing code", AutoSize=true, Enabled=false };
@@ -56,10 +61,13 @@ internal sealed class MainForm : Form
         var senderFields=new FlowLayoutPanel { AutoSize=true, Dock=DockStyle.Top, FlowDirection=FlowDirection.TopDown, WrapContents=false };
         senderFields.Controls.Add(new Label { Text="Legion Go address", AutoSize=true, Margin=new Padding(0,12,0,5) });
         address.Width=590; address.Dock=DockStyle.None; senderFields.Controls.Add(address);
-        side.Items.AddRange(new object[] { "On my right", "On my left" }); side.SelectedIndex=0;
         var placement=new FlowLayoutPanel { AutoSize=true, Margin=new Padding(0,10,0,4) };
-        placement.Controls.Add(new Label { Text="The Legion Go is", AutoSize=true, Padding=new Padding(0,5,8,0) }); placement.Controls.Add(side);
-        senderFields.Controls.Add(placement); senderFields.Controls.Add(edges);
+        placement.Controls.Add(arrange);
+        senderFields.Controls.Add(placement); senderFields.Controls.Add(layoutSummary);
+        edges.Checked=preferences.EdgeEnabled; fullscreen.Checked=preferences.PauseFullscreen;
+        relative.Checked=preferences.RelativeMouse; lockLocal.Checked=preferences.LockLocal;
+        layoutSummary.Text=preferences.Layout.ToString();
+        senderFields.Controls.Add(edges); senderFields.Controls.Add(fullscreen); senderFields.Controls.Add(lockLocal); senderFields.Controls.Add(relative);
         senderPanel.Width=600; senderPanel.Controls.Add(senderFields); root.Controls.Add(senderPanel);
         root.Controls.Add(new Label { Text="Private pairing code", AutoSize=true, Margin=new Padding(0,14,0,5) });
         code.Width=590; code.Dock=DockStyle.None; root.Controls.Add(code);
@@ -71,8 +79,16 @@ internal sealed class MainForm : Form
         root.Controls.Add(new Label { Text="Ctrl + Alt + Space  ·  Switch devices\nCtrl + Alt + Esc  ·  Return here / stop receiving\n\nKeep both devices on the same home network.\nMinimize to keep DeskBridge running in the tray; closing exits.", AutoSize=true, ForeColor=Color.FromArgb(169,181,200), Margin=new Padding(0,12,0,0) });
         Style(root);
         share.CheckedChanged+=(_,_) => Mode();
-        side.SelectedIndexChanged+=(_,_) => { if(capture!=null) capture.RightSide=side.SelectedIndex==0; };
-        edges.CheckedChanged+=(_,_) => { if(capture!=null) capture.EdgeEnabled=edges.Checked; };
+        arrange.Click+=(_,_) => {
+            capture?.ReturnLocal();
+            using var dialog=new LayoutDialog(preferences.Layout,capture?.RemoteSize ?? new Size(1920,1080),capture?.RemoteReady==true);
+            if(dialog.ShowDialog(this)!=DialogResult.OK) return;
+            preferences=preferences with { Layout=dialog.LayoutValue }; SavePreferences();
+        };
+        edges.CheckedChanged+=(_,_) => SavePreferences();
+        fullscreen.CheckedChanged+=(_,_) => SavePreferences();
+        lockLocal.CheckedChanged+=(_,_) => SavePreferences();
+        relative.CheckedChanged+=(_,_) => SavePreferences();
         action.Click+=async (_,_) => await BeginSession();
         stop.Click+=(_,_) => StopSession("Disconnected. Control is local.");
         local.Click+=(_,_) => capture?.ReturnLocal();
@@ -124,6 +140,26 @@ internal sealed class MainForm : Form
         try { BeginInvoke(new Action(() => { if(!IsDisposed && !Disposing) action(); })); } catch(InvalidOperationException) { }
     }
     void Open() { Show(); WindowState=FormWindowState.Normal; Activate(); }
+    void SavePreferences()
+    {
+        capture?.ReturnLocal();
+        preferences=preferences with { EdgeEnabled=edges.Checked, PauseFullscreen=fullscreen.Checked, LockLocal=lockLocal.Checked, RelativeMouse=relative.Checked };
+        layoutSummary.Text=preferences.Layout.ToString();
+        if(capture!=null) {
+            capture.Layout=preferences.Layout; capture.EdgeEnabled=preferences.EdgeEnabled;
+            capture.PauseFullscreen=preferences.PauseFullscreen; capture.LockLocal=preferences.LockLocal; capture.RelativeMouse=preferences.RelativeMouse;
+            ShowConnectedStatus();
+        }
+        try { preferences.Save(); } catch(Exception ex) { SetStatus("Could not save your layout and options: "+ex.Message); }
+    }
+    void ShowConnectedStatus()
+    {
+        if(capture?.Active==true || connection?.Alive!=true) return;
+        if(lockLocal.Checked) SetStatus("Connected — control is locked to this PC. Uncheck the lock to switch devices.");
+        else if(relative.Checked && capture?.RemoteProtocol<2) SetStatus("Relative game mode needs v0.1.2 or newer on the receiving device. Update both devices.");
+        else if(relative.Checked) SetStatus("Connected — game mode. Ctrl + Alt + Space shares input; Ctrl + Alt + Esc returns here.");
+        else SetStatus("Connected — move across the touching edge or press Ctrl + Alt + Space.");
+    }
     async Task CheckUpdate()
     {
         if(updateBusy || lifetime.IsCancellationRequested) return;
@@ -197,10 +233,13 @@ internal sealed class MainForm : Form
                 SetStatus("Connecting securely…");
                 var paired=await Connection.Connect(address.Text,code.Text,current.Token);
                 if(session!=current || current.IsCancellationRequested) { paired.Dispose(); return; }
-                try { capture=new InputCapture { RightSide=side.SelectedIndex==0, EdgeEnabled=edges.Checked }; }
+                try { capture=new InputCapture {
+                    Layout=preferences.Layout, EdgeEnabled=edges.Checked, PauseFullscreen=fullscreen.Checked,
+                    RelativeMouse=relative.Checked, LockLocal=lockLocal.Checked }; }
                 catch { paired.Dispose(); throw; }
                 capture.Changed+=active => {
-                    SetStatus(active ? "Controlling the Legion Go — Ctrl + Alt + Esc brings you back." : "Connected — controlling this PC. Move to the edge or press Ctrl + Alt + Space.");
+                    if(active) SetStatus("Controlling the Legion Go — Ctrl + Alt + Esc brings you back.");
+                    else ShowConnectedStatus();
                     tray.Text=active ? "DeskBridge — controlling Legion Go" : "DeskBridge — local control";
                 };
                 Attach(paired); capture.Connection=paired;
@@ -230,8 +269,8 @@ internal sealed class MainForm : Form
                 catch { UI(() => { if(connection==paired) StopSession("Windows blocked remote input. Check the target app's permissions."); }); paired.Dispose(); }
             } else if(p.Kind==Kind.Hello) UI(() => {
                 if(connection!=paired) return;
-                capture?.SetRemoteSize(p.A,p.B);
-                if(capture?.Active!=true) SetStatus("Connected — move to the edge or press Ctrl + Alt + Space.");
+                capture?.SetRemoteSize(p.A,p.B,p.C);
+                ShowConnectedStatus();
             });
         };
         paired.Closed+=() => {
@@ -244,7 +283,7 @@ internal sealed class MainForm : Form
     void SendDimensions()
     {
         if(!receiving || connection?.Alive!=true) return;
-        var b=SystemInformation.VirtualScreen; connection.Send(new Packet(Kind.Hello,b.Width,b.Height));
+        var b=SystemInformation.VirtualScreen; connection.Send(new Packet(Kind.Hello,b.Width,b.Height,2));
     }
     void StopSession(string text)
     {

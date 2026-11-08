@@ -1,4 +1,4 @@
-# DeskBridge · Windows preview 0.1.1
+# DeskBridge · Windows preview 0.1.2
 
 One keyboard and mouse for your Windows PC and Lenovo Legion Go.
 
@@ -16,10 +16,25 @@ One keyboard and mouse for your Windows PC and Lenovo Legion Go.
 1. Open the same `DeskBridge.exe` on the PC with your keyboard and mouse.
 2. Leave **Share this keyboard and mouse** selected.
 3. Enter the Legion Go's address, then paste its complete pairing code. You can transfer the code in a text file using a USB drive or a shared note you control. It is intentionally long to protect access to the device.
-4. Choose whether the Legion Go sits to your left or right, then click **Connect**.
+4. Click **Connect**, then **Arrange monitors…** to match your desk.
 5. Move the pointer away from the screen edge first, then move it to the selected edge to switch devices. Or press **Ctrl + Alt + Space**.
 
 Both devices must be on the same network. Ethernet and Wi-Fi can be mixed on the same router. Guest Wi-Fi may prevent devices from communicating.
+
+## Arrange monitors
+
+On the sharing PC, click **Arrange monitors…**. Drag the Legion Go tile to the left, right, above, or below your selected local monitor. The edges snap together. Drag along the edge to adjust alignment, or use the Position and Alignment controls. The highlighted seam shows where the pointer can cross in either direction; parts of the edge without a touching screen do not switch devices.
+
+If this PC has multiple monitors, choose which local monitor should connect to the Legion Go. Its existing Windows display layout stays in place. The Legion Go's desktop is one tile, including any displays attached to it. Connect first to use its actual desktop size in the preview. Click **Save layout** to keep the layout between launches. Changing layout returns control locally before applying it.
+
+## Mouse jumping in games
+
+- **Playing on this PC:** **Pause edge switching in fullscreen apps and games** is on by default. A fullscreen game cannot automatically send your pointer to the other device. For windowed games or complete protection, enable **Lock control to this PC (for games)**. This also blocks the switching shortcut until you uncheck it.
+- **Playing on the Legion Go with this PC's mouse:** enable **Relative mouse for remote games** on the sharing PC. This sends movement deltas instead of moving the remote pointer to absolute desktop coordinates. Both devices need v0.1.2 or newer; the app will ask you to update an older receiver rather than send it incompatible movement.
+- Relative mode turns off automatic edge switching in both directions. Press **Ctrl + Alt + Space** to share input and **Ctrl + Alt + Esc** to return locally. Entering game mode does not warp the remote cursor to the middle of the screen.
+- Games differ in whether they accept Windows-generated input. These changes have been compiled, but game behavior and pointer movement on the two devices have not been validated.
+
+Layout and mouse options are saved locally in `%LOCALAPPDATA%\DeskBridge\settings.json`. Pairing codes are not saved.
 
 ## Updates from GitHub
 
@@ -52,7 +67,7 @@ The optional `Allow-Home-Network.ps1` file creates one inbound TCP rule for this
 - Windows 10/11 x64 only. Both devices need to be signed in to a normal desktop.
 - This build was compiled and packaged; live use across two devices has not been tested.
 - Keyboard, pointer movement, left/right/middle/back/forward buttons, and vertical/horizontal scrolling are implemented. Clipboard, file transfer, automatic discovery, automatic reconnection, and startup at sign-in are not included.
-- The receiving device's whole Windows desktop is treated as one rectangle, including multiple displays. Pointer speed follows the sharing PC's Windows pointer settings. Arrange the devices side by side for edge switching.
+- The receiving device's whole Windows desktop is treated as one rectangle, including multiple displays. Pointer speed follows Windows pointer settings. A selected local monitor can connect on any side; remote physical monitors are arranged within Windows settings on that device.
 - Screen resolution changes are sent every two seconds. The app does not transmit video; each device keeps its own screen.
 - Normal Windows desktop apps are the intended use. Games with raw/relative mouse input, anti-cheat restrictions, and different keyboard layouts may need further work. No attempt is made to bypass game restrictions.
 - Windows UAC's secure desktop, sign-in, Ctrl + Alt + Delete, and lock-screen control are not supported. An app running as administrator may block injected input from DeskBridge running normally. Use the same permissions as your target app only when needed.

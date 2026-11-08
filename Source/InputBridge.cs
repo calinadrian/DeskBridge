@@ -11,12 +11,21 @@ internal sealed class InputCapture : IDisposable
     readonly HashSet<int> physicalButtons=new();
     readonly System.Windows.Forms.Timer guard=new() { Interval=100 };
     Native.POINT anchor;
+    Point previousLocal;
+    Rectangle activeLocalBounds;
     double remoteX,remoteY;
     Size remoteSize=new(1920,1080);
     bool remoteReady, armed;
     long cooldown;
     public bool Active { get; private set; }
-    public bool RightSide { get; set; }=true;
+    public ScreenLayout Layout { get; set; }=new();
+    public bool PauseFullscreen { get; set; }=true;
+    public bool RelativeMouse { get; set; }
+    public bool LockLocal { get; set; }
+    public int RemoteProtocol { get; private set; }
+    public Size RemoteSize => remoteSize;
+    public bool RemoteReady => remoteReady;
+    bool RelativeActive => RelativeMouse && RemoteProtocol>=2;
     public bool EdgeEnabled { get; set; }=true;
     public Connection? Connection { get; set; }
     public event Action<bool>? Changed;
@@ -30,41 +39,47 @@ internal sealed class InputCapture : IDisposable
             Native.UnhookWindowsHookEx(mouseHook); Native.UnhookWindowsHookEx(keyHook);
             throw new Win32Exception(Marshal.GetLastWin32Error(),"Unable to capture keyboard and mouse.");
         }
-        guard.Tick+=(_,_) => { if(Active && Connection?.Alive!=true) ReturnLocal(); };
+        Native.GetCursorPos(out var initial); previousLocal=new Point(initial.X,initial.Y);
+        guard.Tick+=(_,_) => { if(Active && (Connection?.Alive!=true || Layout.LocalBounds!=activeLocalBounds)) ReturnLocal(); };
         guard.Start();
     }
-    public void SetRemoteSize(int width,int height)
+    public void SetRemoteSize(int width,int height,int protocol=0)
     {
         if(width<100 || height<100 || width>100000 || height>100000) return;
-        remoteSize=new Size(width,height); remoteReady=true;
+        if(remoteReady && remoteSize!=new Size(width,height)) ReturnLocal();
+        remoteSize=new Size(width,height); remoteReady=true; RemoteProtocol=protocol;
     }
     public void Reset() { ReturnLocal(); remoteReady=false; Connection=null; }
     public void Toggle() { if(Active) ReturnLocal(); else EnterRemote(false); }
-    void EnterRemote(bool edge)
+    void EnterRemote(bool edge,Point? edgePoint=null)
     {
-        if(!remoteReady || Connection?.Alive!=true || physicalButtons.Count!=0) return;
-        var bounds=SystemInformation.VirtualScreen;
+        if(LockLocal || !remoteReady || Connection?.Alive!=true || physicalButtons.Count!=0) return;
+        if(RelativeMouse && RemoteProtocol<2) return;
+        if(edge && (RelativeActive || (PauseFullscreen && Native.FullscreenForeground()))) return;
         Native.GetCursorPos(out var current);
-        remoteY=Math.Clamp((current.Y-bounds.Top)/(double)Math.Max(1,bounds.Height-1)*(remoteSize.Height-1),0,remoteSize.Height-1);
-        remoteX=edge ? (RightSide ? 1 : remoteSize.Width-2) : remoteSize.Width/2;
+        var entry=edgePoint ?? new Point(current.X,current.Y);
+        var remote=Layout.RemoteBounds(remoteSize);
+        remoteX=edge ? Math.Clamp(entry.X-remote.Left,1,remoteSize.Width-2) : remoteSize.Width/2;
+        remoteY=edge ? Math.Clamp(entry.Y-remote.Top,1,remoteSize.Height-2) : remoteSize.Height/2;
         var screen=Screen.FromPoint(new Point(current.X,current.Y)).Bounds;
         anchor=new Native.POINT { X=screen.Left+screen.Width/2, Y=screen.Top+screen.Height/2 };
         Native.SetCursorPos(anchor.X,anchor.Y);
         // Release keys that Windows already saw locally before interception began.
         foreach(var key in physicalKeys) { try { Native.Key(key,0,true,false); } catch { } }
         forwardedKeys.Clear();
-        Active=true;
+        activeLocalBounds=Layout.LocalBounds; Active=true;
         if(!Connection.Send(new Packet(Kind.Start))) { ReturnLocal(); return; }
-        SendPosition(); Changed?.Invoke(true);
+        if(!RelativeActive) SendPosition();
+        Changed?.Invoke(true);
     }
     public void ReturnLocal()
     {
         if(!Active) return;
         Active=false; forwardedKeys.Clear();
         Connection?.Send(new Packet(Kind.Release));
-        var b=SystemInformation.VirtualScreen;
-        Native.SetCursorPos(RightSide ? b.Right-12 : b.Left+12,
-            b.Top+(int)(Math.Clamp(remoteY/(remoteSize.Height-1),0,1)*(b.Height-1)));
+        var point=Layout.ReturnPoint(remoteX,remoteY,remoteSize);
+        Native.SetCursorPos(point.X,point.Y);
+        previousLocal=point;
         armed=false; cooldown=Environment.TickCount64+700;
         Changed?.Invoke(false);
     }
@@ -83,12 +98,15 @@ internal sealed class InputCapture : IDisposable
         if(button!=0) { if(up) physicalButtons.Remove(button); else physicalButtons.Add(button); }
         if(!Active) {
             if(msg==0x200) {
-                var b=SystemInformation.VirtualScreen;
-                if(m.Point.X>b.Left+24 && m.Point.X<b.Right-25) armed=true;
-                bool edge=RightSide ? m.Point.X>=b.Right-1 : m.Point.X<=b.Left;
+                var b=Layout.LocalBounds;
+                if(m.Point.X>b.Left+24 && m.Point.X<b.Right-25 && m.Point.Y>b.Top+24 && m.Point.Y<b.Bottom-25) armed=true;
+                var current=new Point(m.Point.X,m.Point.Y);
+                bool edge=Layout.TryCrossing(previousLocal,current,remoteSize,out var crossing);
+                if(!edge) { crossing=current; edge=Layout.AtJoiningEdge(current,remoteSize); }
+                previousLocal=current;
                 if(EdgeEnabled && armed && edge && Environment.TickCount64>cooldown && physicalKeys.Count==0 && physicalButtons.Count==0)
                 {
-                    EnterRemote(true);
+                    EnterRemote(true,crossing);
                     if(Active) return new IntPtr(1);
                 }
             }
@@ -97,10 +115,15 @@ internal sealed class InputCapture : IDisposable
         if(Connection?.Alive!=true) { ReturnLocal(); return Native.CallNextHookEx(mouseHook,code,message,data); }
         if(msg==0x200) {
             int dx=m.Point.X-anchor.X,dy=m.Point.Y-anchor.Y;
-            remoteX+=dx; remoteY=Math.Clamp(remoteY+dy,0,remoteSize.Height-1);
-            bool crossed=RightSide ? remoteX<0 : remoteX>=remoteSize.Width;
+            if(RelativeActive) {
+                // Never warp the receiving game's pointer or switch devices at an edge in game mode.
+                if(dx!=0 || dy!=0) Connection.Send(new Packet(Kind.Move,Math.Clamp(dx,-32768,32767),Math.Clamp(dy,-32768,32767),1));
+                return new IntPtr(1);
+            }
+            remoteX+=dx; remoteY+=dy;
+            bool crossed=Layout.CanReturn(remoteX,remoteY,remoteSize);
             if(crossed && physicalKeys.Count==0 && physicalButtons.Count==0) ReturnLocal();
-            else { remoteX=Math.Clamp(remoteX,0,remoteSize.Width-1); SendPosition(); }
+            else { remoteX=Math.Clamp(remoteX,0,remoteSize.Width-1); remoteY=Math.Clamp(remoteY,0,remoteSize.Height-1); SendPosition(); }
         } else if(button!=0) Connection.Send(new Packet(Kind.Button,button,up ? 1 : 0));
         else if(msg is 0x20A or 0x20E) Connection.Send(new Packet(Kind.Wheel,unchecked((short)(m.Data>>16)),msg==0x20E ? 1 : 0));
         return new IntPtr(1);
@@ -152,7 +175,9 @@ internal sealed class InputSink
             if(!active) return;
             switch(p.Kind) {
                 case Kind.Move:
-                    Native.Mouse(Math.Clamp(p.A,0,65535),Math.Clamp(p.B,0,65535),0,0xC001); break;
+                    if(p.C==1) Native.Mouse(Math.Clamp(p.A,-32768,32767),Math.Clamp(p.B,-32768,32767),0,0x2001);
+                    else Native.Mouse(Math.Clamp(p.A,0,65535),Math.Clamp(p.B,0,65535),0,0xC001);
+                    break;
                 case Kind.Key:
                     if(p.A<1 || p.A>255 || p.B<0 || p.B>255 || p.C is <0 or >1 || p.D is <0 or >1) return;
                     if(p.C==0) keys[p.A]=p;

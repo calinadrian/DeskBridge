@@ -7,6 +7,7 @@ internal static class Native
 {
     internal delegate IntPtr Hook(int code, IntPtr message, IntPtr data);
     [StructLayout(LayoutKind.Sequential)] internal struct POINT { public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)] internal struct RECT { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] internal struct MouseData { public POINT Point; public uint Data, Flags, Time; public UIntPtr Extra; }
     [StructLayout(LayoutKind.Sequential)] internal struct KeyData { public uint Key, Scan, Flags, Time; public UIntPtr Extra; }
     [StructLayout(LayoutKind.Sequential)] internal struct MOUSEINPUT { public int X, Y; public uint Data, Flags, Time; public UIntPtr Extra; }
@@ -23,6 +24,18 @@ internal static class Native
     [DllImport("user32.dll")] internal static extern short GetAsyncKeyState(int key);
     [DllImport("user32.dll")] internal static extern bool RegisterHotKey(IntPtr window, int id, uint modifiers, uint key);
     [DllImport("user32.dll")] internal static extern bool UnregisterHotKey(IntPtr window, int id);
+    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr window,out RECT rect);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr window,System.Text.StringBuilder name,int maxCount);
+    internal static bool FullscreenForeground()
+    {
+        var window=GetForegroundWindow();
+        if(window==IntPtr.Zero || !GetWindowRect(window,out var r)) return false;
+        var name=new System.Text.StringBuilder(256); GetClassName(window,name,name.Capacity);
+        if(name.ToString() is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Shell_SecondaryTrayWnd") return false;
+        var b=Screen.FromHandle(window).Bounds;
+        return r.Left<=b.Left+2 && r.Top<=b.Top+2 && r.Right>=b.Right-2 && r.Bottom>=b.Bottom-2;
+    }
     internal static bool Down(int key) => (GetAsyncKeyState(key) & 0x8000) != 0;
 
     internal static void Key(int key, int scan, bool up, bool extended)
