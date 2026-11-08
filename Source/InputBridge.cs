@@ -24,6 +24,7 @@ internal sealed class InputCapture : IDisposable
     public bool LockLocal { get; set; }
     public int RemoteProtocol { get; private set; }
     public Size RemoteSize => remoteSize;
+    public Rectangle[] RemoteScreens => Layout.RemoteScreens;
     public bool RemoteReady => remoteReady;
     bool RelativeActive => RelativeMouse && RemoteProtocol>=2;
     public bool EdgeEnabled { get; set; }=true;
@@ -46,10 +47,15 @@ internal sealed class InputCapture : IDisposable
     public void SetRemoteSize(int width,int height,int protocol=0)
     {
         if(width<100 || height<100 || width>100000 || height>100000) return;
-        if(remoteReady && remoteSize!=new Size(width,height)) ReturnLocal();
+        if(remoteReady && remoteSize!=new Size(width,height)) { ReturnLocal(); Layout=Layout with { RemoteScreens=Array.Empty<Rectangle>() }; }
         remoteSize=new Size(width,height); remoteReady=true; RemoteProtocol=protocol;
     }
     public void Reset() { ReturnLocal(); remoteReady=false; Connection=null; }
+    public void SetRemoteScreens(Rectangle[] screens)
+    {
+        if(screens.SequenceEqual(Layout.RemoteScreens)) return;
+        ReturnLocal(); Layout=Layout with { RemoteScreens=screens };
+    }
     public void SetRemoteCursor(int x,int y,bool fullscreen)
     {
         if(!Active || RemoteProtocol<3) return;
@@ -66,8 +72,9 @@ internal sealed class InputCapture : IDisposable
         Native.GetCursorPos(out var current);
         var entry=edgePoint ?? new Point(current.X,current.Y);
         var remote=Layout.RemoteBounds(remoteSize);
-        remoteX=edge ? Math.Clamp(entry.X-remote.Left,1,remoteSize.Width-2) : remoteSize.Width/2;
-        remoteY=edge ? Math.Clamp(entry.Y-remote.Top,1,remoteSize.Height-2) : remoteSize.Height/2;
+        var selected=Layout.SelectedRemote(remoteSize);
+        remoteX=edge ? Math.Clamp(entry.X-remote.Left,selected.Left+1,selected.Right-2) : selected.Left+selected.Width/2;
+        remoteY=edge ? Math.Clamp(entry.Y-remote.Top,selected.Top+1,selected.Bottom-2) : selected.Top+selected.Height/2;
         var screen=Screen.FromPoint(new Point(current.X,current.Y)).Bounds;
         anchor=new Native.POINT { X=screen.Left+screen.Width/2, Y=screen.Top+screen.Height/2 };
         Native.SetCursorPos(anchor.X,anchor.Y);
@@ -131,14 +138,16 @@ internal sealed class InputCapture : IDisposable
                 if(dx!=0 || dy!=0) Connection.Send(new Packet(Kind.Move,Math.Clamp(dx,-32768,32767),Math.Clamp(dy,-32768,32767),1));
                 return new IntPtr(1);
             }
+            double previousX=remoteX,previousY=remoteY;
             remoteX+=dx; remoteY+=dy;
-            bool crossed=Layout.CanReturn(remoteX,remoteY,remoteSize);
+            bool crossed=Layout.CanReturn(remoteX,remoteY,previousX,previousY,remoteSize);
             if(crossed && remoteArmed && !(PauseFullscreen && remoteFullscreen) && physicalKeys.Count==0 && physicalButtons.Count==0) ReturnLocal();
             else {
                 remoteX=Math.Clamp(remoteX,0,remoteSize.Width-1); remoteY=Math.Clamp(remoteY,0,remoteSize.Height-1);
+                var selected=Layout.SelectedRemote(remoteSize);
                 bool away=Layout.Side switch {
-                    ScreenSide.Right=>remoteX>24, ScreenSide.Left=>remoteX<remoteSize.Width-25,
-                    ScreenSide.Above=>remoteY<remoteSize.Height-25, _=>remoteY>24
+                    ScreenSide.Right=>remoteX>selected.Left+24, ScreenSide.Left=>remoteX<selected.Right-25,
+                    ScreenSide.Above=>remoteY<selected.Bottom-25, _=>remoteY>selected.Top+24
                 };
                 if(physicalButtons.Count==0 && away) remoteArmed=true;
                 // New peers report their real cursor position. Never overwrite a game's cursor

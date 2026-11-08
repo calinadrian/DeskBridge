@@ -40,6 +40,9 @@ internal sealed class MainForm : Form
     InputCapture? capture;
     InputSink? sink;
     bool receiving;
+    bool peerSupportsDisplays;
+    int expectedDisplays;
+    readonly List<Rectangle> incomingDisplays=new();
 
     public MainForm()
     {
@@ -81,7 +84,7 @@ internal sealed class MainForm : Form
         share.CheckedChanged+=(_,_) => Mode();
         arrange.Click+=(_,_) => {
             capture?.ReturnLocal();
-            using var dialog=new LayoutDialog(preferences.Layout,capture?.RemoteSize ?? new Size(1920,1080),capture?.RemoteReady==true);
+            using var dialog=new LayoutDialog(preferences.Layout with { RemoteScreens=capture?.RemoteScreens ?? Array.Empty<Rectangle>() },capture?.RemoteSize ?? new Size(1920,1080),capture?.RemoteReady==true);
             if(dialog.ShowDialog(this)!=DialogResult.OK) return;
             preferences=preferences with { Layout=dialog.LayoutValue }; SavePreferences();
         };
@@ -146,7 +149,7 @@ internal sealed class MainForm : Form
         preferences=preferences with { EdgeEnabled=edges.Checked, PauseFullscreen=fullscreen.Checked, LockLocal=lockLocal.Checked, RelativeMouse=relative.Checked };
         layoutSummary.Text=preferences.Layout.ToString();
         if(capture!=null) {
-            capture.Layout=preferences.Layout; capture.EdgeEnabled=preferences.EdgeEnabled;
+            capture.Layout=preferences.Layout with { RemoteScreens=capture.RemoteScreens }; capture.EdgeEnabled=preferences.EdgeEnabled;
             capture.PauseFullscreen=preferences.PauseFullscreen; capture.LockLocal=preferences.LockLocal; capture.RelativeMouse=preferences.RelativeMouse;
             ShowConnectedStatus();
         }
@@ -234,7 +237,7 @@ internal sealed class MainForm : Form
                 var paired=await Connection.Connect(address.Text,code.Text,current.Token);
                 if(session!=current || current.IsCancellationRequested) { paired.Dispose(); return; }
                 try { capture=new InputCapture {
-                    Layout=preferences.Layout, EdgeEnabled=edges.Checked, PauseFullscreen=fullscreen.Checked,
+                    Layout=preferences.Layout with { RemoteScreens=Array.Empty<Rectangle>() }, EdgeEnabled=edges.Checked, PauseFullscreen=fullscreen.Checked,
                     RelativeMouse=relative.Checked, LockLocal=lockLocal.Checked }; }
                 catch { paired.Dispose(); throw; }
                 capture.Changed+=active => {
@@ -258,6 +261,13 @@ internal sealed class MainForm : Form
         bool isReceiver=receiving;
         paired.Received+=p => {
             if(isReceiver) {
+                if(p.Kind==Kind.Hello) {
+                    UI(() => {
+                        if(connection!=paired) return;
+                        peerSupportsDisplays=p.C>=4; SendDimensions();
+                    });
+                    return;
+                }
                 try {
                     target!.Handle(p);
                     if(p.Kind is Kind.Start or Kind.Release) UI(() => {
@@ -271,7 +281,21 @@ internal sealed class MainForm : Form
             } else if(p.Kind==Kind.Hello) UI(() => {
                 if(connection!=paired) return;
                 capture?.SetRemoteSize(p.A,p.B,p.C);
+                incomingDisplays.Clear(); expectedDisplays=p.C>=4 && p.D is >0 and <=32 ? p.D : 0;
+                if(expectedDisplays==0) capture?.SetRemoteScreens(Array.Empty<Rectangle>());
                 ShowConnectedStatus();
+            });
+            else if(p.Kind==Kind.Display && !isReceiver) UI(() => {
+                if(connection!=paired || expectedDisplays==0 || capture==null) return;
+                var size=capture.RemoteSize;
+                if(p.A<0 || p.B<0 || p.C<32 || p.D<32 || (long)p.A+p.C>size.Width || (long)p.B+p.D>size.Height) {
+                    expectedDisplays=0; incomingDisplays.Clear(); return;
+                }
+                incomingDisplays.Add(new Rectangle(p.A,p.B,p.C,p.D));
+                if(incomingDisplays.Count==expectedDisplays) {
+                    capture.SetRemoteScreens(incomingDisplays.ToArray()); expectedDisplays=0;
+                    layoutSummary.Text=preferences.Layout+ $" · {incomingDisplays.Count} remote monitor(s)";
+                }
             });
             else if(p.Kind==Kind.Cursor && !isReceiver) UI(() => {
                 if(connection==paired) capture?.SetRemoteCursor(p.A,p.B,p.D==1);
@@ -283,15 +307,23 @@ internal sealed class MainForm : Form
         };
         paired.Start();
         if(receiving) { SendDimensions(); dimensions.Start(); }
+        else paired.Send(new Packet(Kind.Hello,C:4));
     }
     void SendDimensions()
     {
         if(!receiving || connection?.Alive!=true) return;
-        var b=SystemInformation.VirtualScreen; connection.Send(new Packet(Kind.Hello,b.Width,b.Height,3));
+        var b=SystemInformation.VirtualScreen;
+        var screens=Screen.AllScreens.OrderByDescending(s=>s.Primary).ThenBy(s=>s.DeviceName,StringComparer.Ordinal).Take(32).ToArray();
+        connection.Send(new Packet(Kind.Hello,b.Width,b.Height,4,peerSupportsDisplays ? screens.Length : 0));
+        if(peerSupportsDisplays) foreach(var screen in screens) {
+            var r=screen.Bounds;
+            connection.Send(new Packet(Kind.Display,r.Left-b.Left,r.Top-b.Top,r.Width,r.Height));
+        }
     }
     void StopSession(string text)
     {
         var previous=session; session=null;
+        peerSupportsDisplays=false; expectedDisplays=0; incomingDisplays.Clear();
         previous?.Cancel(); listener?.Stop(); listener=null;
         dimensions.Stop(); Native.UnregisterHotKey(Handle,1);
         var old=connection; connection=null;

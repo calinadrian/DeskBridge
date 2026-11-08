@@ -10,41 +10,99 @@ internal sealed record ScreenLayout
     public ScreenSide Side { get; init; }=ScreenSide.Right;
     public int OffsetPercent { get; init; }
     public string Monitor { get; init; }="";
+    public int RemoteMonitor { get; init; }
+    [JsonIgnore] public Rectangle[] RemoteScreens { get; init; }=Array.Empty<Rectangle>();
+    public Rectangle SelectedRemote(Size size) => RemoteScreens.Length==0 ? new Rectangle(Point.Empty,size) : RemoteScreens[RemoteMonitor>=0 && RemoteMonitor<RemoteScreens.Length ? RemoteMonitor : 0];
     [JsonIgnore]
     public Rectangle LocalBounds => (Screen.AllScreens.FirstOrDefault(s=>s.DeviceName==Monitor) ?? Screen.PrimaryScreen ?? Screen.AllScreens[0]).Bounds;
     public Rectangle RemoteBounds(Size size)
     {
         var b=LocalBounds;
+        var selected=SelectedRemote(size);
+        var monitorSize=selected.Size;
         bool horizontal=Side is ScreenSide.Right or ScreenSide.Left;
-        int localLength=horizontal ? b.Height : b.Width, remoteLength=horizontal ? size.Height : size.Width;
+        int localLength=horizontal ? b.Height : b.Width, remoteLength=horizontal ? monitorSize.Height : monitorSize.Width;
         int offset=(int)Math.Round((localLength-remoteLength)/2.0+Math.Clamp(OffsetPercent,-95,95)/100.0*(localLength+remoteLength)/2.0);
         offset=Math.Clamp(offset,-remoteLength+32,localLength-32);
-        return Side switch {
-            ScreenSide.Left=>new Rectangle(b.Left-size.Width,b.Top+offset,size.Width,size.Height),
-            ScreenSide.Above=>new Rectangle(b.Left+offset,b.Top-size.Height,size.Width,size.Height),
-            ScreenSide.Below=>new Rectangle(b.Left+offset,b.Bottom,size.Width,size.Height),
-            _=>new Rectangle(b.Right,b.Top+offset,size.Width,size.Height)
+        var placed=Side switch {
+            ScreenSide.Left=>new Point(b.Left-monitorSize.Width,b.Top+offset),
+            ScreenSide.Above=>new Point(b.Left+offset,b.Top-monitorSize.Height),
+            ScreenSide.Below=>new Point(b.Left+offset,b.Bottom),
+            _=>new Point(b.Right,b.Top+offset)
         };
+        return new Rectangle(placed.X-selected.X,placed.Y-selected.Y,size.Width,size.Height);
+    }
+    public Rectangle PortalBounds(Size size)
+    {
+        var origin=RemoteBounds(size); var monitor=SelectedRemote(size);
+        return new Rectangle(origin.Left+monitor.Left,origin.Top+monitor.Top,monitor.Width,monitor.Height);
+    }
+    public List<(int Start,int End)> PortalSpans(Size size)
+    {
+        var local=LocalBounds; var portal=PortalBounds(size); var origin=RemoteBounds(size);
+        bool horizontal=Side is ScreenSide.Left or ScreenSide.Right;
+        int start=horizontal ? Math.Max(local.Top,portal.Top) : Math.Max(local.Left,portal.Left);
+        int end=horizontal ? Math.Min(local.Bottom,portal.Bottom) : Math.Min(local.Right,portal.Right);
+        var spans=new List<(int Start,int End)>(); if(end<=start) return spans;
+        spans.Add((start,end));
+        int line=Side switch { ScreenSide.Right=>portal.Left-1,ScreenSide.Left=>portal.Right,ScreenSide.Above=>portal.Bottom,_=>portal.Top-1 };
+        var selected=SelectedRemote(size);
+        foreach(var screen in RemoteScreens) {
+            if(screen==selected) continue;
+            var r=new Rectangle(origin.Left+screen.Left,origin.Top+screen.Top,screen.Width,screen.Height);
+            if(horizontal ? line<r.Left || line>=r.Right : line<r.Top || line>=r.Bottom) continue;
+            int blockStart=horizontal ? r.Top : r.Left,blockEnd=horizontal ? r.Bottom : r.Right;
+            var remaining=new List<(int Start,int End)>();
+            foreach(var span in spans) {
+                if(blockEnd<=span.Start || blockStart>=span.End) remaining.Add(span);
+                else {
+                    if(blockStart>span.Start) remaining.Add((span.Start,blockStart));
+                    if(blockEnd<span.End) remaining.Add((blockEnd,span.End));
+                }
+            }
+            spans=remaining;
+        }
+        int localLine=Side switch { ScreenSide.Right=>local.Right,ScreenSide.Left=>local.Left-1,ScreenSide.Above=>local.Top-1,_=>local.Bottom };
+        foreach(var screen in Screen.AllScreens) {
+            var r=screen.Bounds; if(r==local) continue;
+            if(horizontal ? localLine<r.Left || localLine>=r.Right : localLine<r.Top || localLine>=r.Bottom) continue;
+            int blockStart=horizontal ? r.Top : r.Left,blockEnd=horizontal ? r.Bottom : r.Right;
+            var remaining=new List<(int Start,int End)>();
+            foreach(var span in spans) {
+                if(blockEnd<=span.Start || blockStart>=span.End) remaining.Add(span);
+                else {
+                    if(blockStart>span.Start) remaining.Add((span.Start,blockStart));
+                    if(blockEnd<span.End) remaining.Add((blockEnd,span.End));
+                }
+            }
+            spans=remaining;
+        }
+        return spans;
     }
     public bool AtJoiningEdge(Point p,Size remoteSize)
     {
-        var b=LocalBounds; var r=RemoteBounds(remoteSize);
-        return Side switch {
-            ScreenSide.Left=>p.X<=b.Left && p.X>=b.Left-1 && p.Y>=Math.Max(b.Top,r.Top) && p.Y<Math.Min(b.Bottom,r.Bottom),
-            ScreenSide.Right=>p.X>=b.Right-1 && p.X<=b.Right && p.Y>=Math.Max(b.Top,r.Top) && p.Y<Math.Min(b.Bottom,r.Bottom),
-            ScreenSide.Above=>p.Y<=b.Top && p.Y>=b.Top-1 && p.X>=Math.Max(b.Left,r.Left) && p.X<Math.Min(b.Right,r.Right),
-            _=>p.Y>=b.Bottom-1 && p.Y<=b.Bottom && p.X>=Math.Max(b.Left,r.Left) && p.X<Math.Min(b.Right,r.Right)
+        var b=LocalBounds;
+        bool onEdge=Side switch {
+            ScreenSide.Left=>p.X<=b.Left && p.X>=b.Left-1,
+            ScreenSide.Right=>p.X>=b.Right-1 && p.X<=b.Right,
+            ScreenSide.Above=>p.Y<=b.Top && p.Y>=b.Top-1,
+            _=>p.Y>=b.Bottom-1 && p.Y<=b.Bottom
         };
+        if(!onEdge) return false;
+        int along=Side is ScreenSide.Left or ScreenSide.Right ? p.Y : p.X;
+        return PortalSpans(remoteSize).Any(s=>along>=s.Start && along<s.End);
     }
-    public bool CanReturn(double x,double y,Size remoteSize)
+    public bool CanReturn(double x,double y,double previousX,double previousY,Size remoteSize)
     {
-        var b=LocalBounds; var r=RemoteBounds(remoteSize);
-        return Side switch {
-            ScreenSide.Right=>x<0 && r.Top+y>=b.Top && r.Top+y<b.Bottom,
-            ScreenSide.Left=>x>=remoteSize.Width && r.Top+y>=b.Top && r.Top+y<b.Bottom,
-            ScreenSide.Above=>y>=remoteSize.Height && r.Left+x>=b.Left && r.Left+x<b.Right,
-            _=>y<0 && r.Left+x>=b.Left && r.Left+x<b.Right
+        var m=SelectedRemote(remoteSize); var r=RemoteBounds(remoteSize);
+        if(!m.Contains((int)previousX,(int)previousY)) return false;
+        bool crossed=Side switch {
+            ScreenSide.Right=>x<m.Left, ScreenSide.Left=>x>=m.Right,
+            ScreenSide.Above=>y>=m.Bottom, _=>y<m.Top
         };
+        if(!crossed) return false;
+        double along=Side is ScreenSide.Left or ScreenSide.Right ? r.Top+y : r.Left+x;
+        return PortalSpans(remoteSize).Any(s=>along>=s.Start && along<s.End);
     }
     public bool TryCrossing(Point previous,Point current,Size remoteSize,out Point crossing)
     {

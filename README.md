@@ -1,4 +1,4 @@
-# DeskBridge · Windows preview 0.1.3
+# DeskBridge · Windows preview 0.1.4
 
 One keyboard and mouse for your Windows PC and Lenovo Legion Go.
 
@@ -25,7 +25,11 @@ Both devices must be on the same network. Ethernet and Wi-Fi can be mixed on the
 
 On the sharing PC, click **Arrange monitors…**. Drag the Legion Go tile to the left, right, above, or below your selected local monitor. The edges snap together. Drag along the edge to adjust alignment, or use the Position and Alignment controls. The highlighted seam shows where the pointer can cross in either direction; parts of the edge without a touching screen do not switch devices.
 
-If this PC has multiple monitors, choose which local monitor should connect to the Legion Go. Its existing Windows display layout stays in place. The Legion Go's desktop is one tile, including any displays attached to it. Connect first to use its actual desktop size in the preview. Click **Save layout** to keep the layout between launches. Changing layout returns control locally before applying it.
+If either device has multiple monitors, the editor shows each physical display separately. Choose the local monitor and remote monitor that should connect. Drag the highlighted remote tile to position the remote group; its other monitors move with it and keep their arrangement from Windows settings. Each tile is numbered and shows its resolution. The remote primary display is listed first; these numbers are DeskBridge's own ordering and may differ from Windows display numbers.
+
+Connect both devices on v0.1.4 or newer to detect individual remote monitors. Older receivers still work as a single combined desktop tile. Use an exposed outside edge: an edge occupied by another monitor on either device remains available for that device's normal Windows switching. Green seams show the parts that can switch between devices; if no exposed seam remains, select another monitor or side. The shortcut still works without an exposed seam.
+
+Click **Save layout** to keep the selected monitors, side, and alignment between launches. Changing layout returns control locally before applying it. Remote monitor positions refresh every two seconds; unplugging or rearranging a remote monitor returns control locally if the layout changes. If the saved remote monitor is no longer present, the primary display is used instead. Reopen the editor after a display change to see the refreshed layout.
 
 ## Mouse jumping in games
 
@@ -73,7 +77,7 @@ The optional `Allow-Home-Network.ps1` file creates one inbound TCP rule for this
 - Windows 10/11 x64 only. Both devices need to be signed in to a normal desktop.
 - This build was compiled and packaged; live use across two devices has not been tested.
 - Keyboard, pointer movement, left/right/middle/back/forward buttons, and vertical/horizontal scrolling are implemented. Clipboard, file transfer, automatic discovery, automatic reconnection, and startup at sign-in are not included.
-- The receiving device's whole Windows desktop is treated as one rectangle, including multiple displays. Pointer speed follows Windows pointer settings. A selected local monitor can connect on any side; remote physical monitors are arranged within Windows settings on that device.
+- Each physical display is shown separately when both devices support monitor detection. A selected local and remote monitor can connect on an exposed side; the arrangement of monitors belonging to one device is set in Windows settings on that device. Pointer speed follows Windows pointer settings.
 - Screen resolution changes are sent every two seconds. The app does not transmit video; each device keeps its own screen.
 - Normal Windows desktop apps are the intended use. Games with raw/relative mouse input, anti-cheat restrictions, and different keyboard layouts may need further work. No attempt is made to bypass game restrictions.
 - Windows UAC's secure desktop, sign-in, Ctrl + Alt + Delete, and lock-screen control are not supported. An app running as administrator may block injected input from DeskBridge running normally. Use the same permissions as your target app only when needed.

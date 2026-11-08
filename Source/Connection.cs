@@ -10,7 +10,7 @@ using System.Threading.Channels;
 
 namespace DeskBridge;
 
-internal enum Kind : byte { Ping=1, Hello=2, Start=3, Release=4, Move=5, Key=6, Button=7, Wheel=8, Cursor=9 }
+internal enum Kind : byte { Ping=1, Hello=2, Start=3, Release=4, Move=5, Key=6, Button=7, Wheel=8, Cursor=9, Display=10 }
 internal record struct Packet(Kind Kind, int A=0, int B=0, int C=0, int D=0);
 
 internal sealed class Connection : IDisposable
