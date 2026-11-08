@@ -15,7 +15,7 @@ internal sealed class InputCapture : IDisposable
     Rectangle activeLocalBounds;
     double remoteX,remoteY;
     Size remoteSize=new(1920,1080);
-    bool remoteReady, armed;
+    bool remoteReady, armed, remoteArmed, remoteFullscreen;
     long cooldown;
     public bool Active { get; private set; }
     public ScreenLayout Layout { get; set; }=new();
@@ -50,6 +50,13 @@ internal sealed class InputCapture : IDisposable
         remoteSize=new Size(width,height); remoteReady=true; RemoteProtocol=protocol;
     }
     public void Reset() { ReturnLocal(); remoteReady=false; Connection=null; }
+    public void SetRemoteCursor(int x,int y,bool fullscreen)
+    {
+        if(!Active || RemoteProtocol<3) return;
+        remoteX=Math.Clamp(x,0,65535)/65535.0*(remoteSize.Width-1);
+        remoteY=Math.Clamp(y,0,65535)/65535.0*(remoteSize.Height-1);
+        remoteFullscreen=fullscreen;
+    }
     public void Toggle() { if(Active) ReturnLocal(); else EnterRemote(false); }
     void EnterRemote(bool edge,Point? edgePoint=null)
     {
@@ -67,8 +74,8 @@ internal sealed class InputCapture : IDisposable
         // Release keys that Windows already saw locally before interception began.
         foreach(var key in physicalKeys) { try { Native.Key(key,0,true,false); } catch { } }
         forwardedKeys.Clear();
-        activeLocalBounds=Layout.LocalBounds; Active=true;
-        if(!Connection.Send(new Packet(Kind.Start))) { ReturnLocal(); return; }
+        activeLocalBounds=Layout.LocalBounds; Active=true; remoteArmed=true;
+        if(!Connection.Send(new Packet(Kind.Start,C:3))) { ReturnLocal(); return; }
         if(!RelativeActive) SendPosition();
         Changed?.Invoke(true);
     }
@@ -95,11 +102,15 @@ internal sealed class InputCapture : IDisposable
         int button=msg switch { 0x201 or 0x202=>1,0x204 or 0x205=>2,0x207 or 0x208=>3,
             0x20B or 0x20C=>((m.Data>>16)==1 ? 4 : 5),_=>0 };
         bool up=msg is 0x202 or 0x205 or 0x208 or 0x20C;
-        if(button!=0) { if(up) physicalButtons.Remove(button); else physicalButtons.Add(button); }
+        if(button!=0) {
+            if(up) physicalButtons.Remove(button); else physicalButtons.Add(button);
+            // Releasing a drag must not immediately transfer control at a clamped edge.
+            armed=false; remoteArmed=false;
+        }
         if(!Active) {
             if(msg==0x200) {
                 var b=Layout.LocalBounds;
-                if(m.Point.X>b.Left+24 && m.Point.X<b.Right-25 && m.Point.Y>b.Top+24 && m.Point.Y<b.Bottom-25) armed=true;
+                if(physicalButtons.Count==0 && m.Point.X>b.Left+24 && m.Point.X<b.Right-25 && m.Point.Y>b.Top+24 && m.Point.Y<b.Bottom-25) armed=true;
                 var current=new Point(m.Point.X,m.Point.Y);
                 bool edge=Layout.TryCrossing(previousLocal,current,remoteSize,out var crossing);
                 if(!edge) { crossing=current; edge=Layout.AtJoiningEdge(current,remoteSize); }
@@ -122,8 +133,20 @@ internal sealed class InputCapture : IDisposable
             }
             remoteX+=dx; remoteY+=dy;
             bool crossed=Layout.CanReturn(remoteX,remoteY,remoteSize);
-            if(crossed && physicalKeys.Count==0 && physicalButtons.Count==0) ReturnLocal();
-            else { remoteX=Math.Clamp(remoteX,0,remoteSize.Width-1); remoteY=Math.Clamp(remoteY,0,remoteSize.Height-1); SendPosition(); }
+            if(crossed && remoteArmed && !(PauseFullscreen && remoteFullscreen) && physicalKeys.Count==0 && physicalButtons.Count==0) ReturnLocal();
+            else {
+                remoteX=Math.Clamp(remoteX,0,remoteSize.Width-1); remoteY=Math.Clamp(remoteY,0,remoteSize.Height-1);
+                bool away=Layout.Side switch {
+                    ScreenSide.Right=>remoteX>24, ScreenSide.Left=>remoteX<remoteSize.Width-25,
+                    ScreenSide.Above=>remoteY<remoteSize.Height-25, _=>remoteY>24
+                };
+                if(physicalButtons.Count==0 && away) remoteArmed=true;
+                // New peers report their real cursor position. Never overwrite a game's cursor
+                // restoration after a held button with our old absolute position.
+                if(RemoteProtocol>=3) {
+                    if(dx!=0 || dy!=0) Connection.Send(new Packet(Kind.Move,Math.Clamp(dx,-32768,32767),Math.Clamp(dy,-32768,32767),1));
+                } else SendPosition();
+            }
         } else if(button!=0) Connection.Send(new Packet(Kind.Button,button,up ? 1 : 0));
         else if(msg is 0x20A or 0x20E) Connection.Send(new Packet(Kind.Wheel,unchecked((short)(m.Data>>16)),msg==0x20E ? 1 : 0));
         return new IntPtr(1);
@@ -165,18 +188,23 @@ internal sealed class InputSink
     readonly object gate=new();
     readonly Dictionary<int,Packet> keys=new();
     readonly HashSet<int> buttons=new();
-    bool active,closed;
+    bool active,closed,feedback;
+    long lastFeedback;
+    long lastFullscreenCheck;
+    bool fullscreen;
+    public event Action<Packet>? CursorChanged;
     public void Handle(Packet p)
     {
         lock(gate) {
             if(closed) return;
             if(p.Kind==Kind.Release) { Release(); return; }
-            if(p.Kind==Kind.Start) { Release(); active=true; return; }
+            if(p.Kind==Kind.Start) { Release(); active=true; feedback=p.C>=3; return; }
             if(!active) return;
             switch(p.Kind) {
                 case Kind.Move:
                     if(p.C==1) Native.Mouse(Math.Clamp(p.A,-32768,32767),Math.Clamp(p.B,-32768,32767),0,0x2001);
                     else Native.Mouse(Math.Clamp(p.A,0,65535),Math.Clamp(p.B,0,65535),0,0xC001);
+                    ReportCursor(p.C!=1);
                     break;
                 case Kind.Key:
                     if(p.A<1 || p.A>255 || p.B<0 || p.B>255 || p.C is <0 or >1 || p.D is <0 or >1) return;
@@ -189,11 +217,25 @@ internal sealed class InputSink
                     if(p.B==0) buttons.Add(p.A);
                     Button(p.A,p.B!=0);
                     if(p.B!=0) buttons.Remove(p.A);
+                    ReportCursor(true);
                     break;
                 case Kind.Wheel:
                     Native.Mouse(0,0,unchecked((uint)Math.Clamp(p.A,-32768,32767)),p.B==1 ? 0x1000u : 0x800u); break;
             }
         }
+    }
+    void ReportCursor(bool force)
+    {
+        if(!feedback || (!force && Environment.TickCount64-lastFeedback<20)) return;
+        if(!Native.GetCursorPos(out var p)) return;
+        lastFeedback=Environment.TickCount64;
+        if(Environment.TickCount64-lastFullscreenCheck>200) {
+            fullscreen=Native.FullscreenForeground(); lastFullscreenCheck=Environment.TickCount64;
+        }
+        var b=SystemInformation.VirtualScreen;
+        CursorChanged?.Invoke(new Packet(Kind.Cursor,
+            (int)Math.Round(Math.Clamp((p.X-b.Left)/(double)Math.Max(1,b.Width-1),0,1)*65535),
+            (int)Math.Round(Math.Clamp((p.Y-b.Top)/(double)Math.Max(1,b.Height-1),0,1)*65535),D:fullscreen ? 1 : 0));
     }
     static void Button(int button,bool up)
     {

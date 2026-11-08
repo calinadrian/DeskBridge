@@ -254,6 +254,7 @@ internal sealed class MainForm : Form
     {
         connection=paired;
         var target=receiving ? sink=new InputSink() : null;
+        if(target!=null) target.CursorChanged+=p=>paired.Send(p);
         bool isReceiver=receiving;
         paired.Received+=p => {
             if(isReceiver) {
@@ -272,6 +273,9 @@ internal sealed class MainForm : Form
                 capture?.SetRemoteSize(p.A,p.B,p.C);
                 ShowConnectedStatus();
             });
+            else if(p.Kind==Kind.Cursor && !isReceiver) UI(() => {
+                if(connection==paired) capture?.SetRemoteCursor(p.A,p.B,p.D==1);
+            });
         };
         paired.Closed+=() => {
             target?.Close();
@@ -283,7 +287,7 @@ internal sealed class MainForm : Form
     void SendDimensions()
     {
         if(!receiving || connection?.Alive!=true) return;
-        var b=SystemInformation.VirtualScreen; connection.Send(new Packet(Kind.Hello,b.Width,b.Height,2));
+        var b=SystemInformation.VirtualScreen; connection.Send(new Packet(Kind.Hello,b.Width,b.Height,3));
     }
     void StopSession(string text)
     {

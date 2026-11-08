@@ -1,4 +1,4 @@
-# DeskBridge · Windows preview 0.1.2
+# DeskBridge · Windows preview 0.1.3
 
 One keyboard and mouse for your Windows PC and Lenovo Legion Go.
 
@@ -33,6 +33,12 @@ If this PC has multiple monitors, choose which local monitor should connect to t
 - **Playing on the Legion Go with this PC's mouse:** enable **Relative mouse for remote games** on the sharing PC. This sends movement deltas instead of moving the remote pointer to absolute desktop coordinates. Both devices need v0.1.2 or newer; the app will ask you to update an older receiver rather than send it incompatible movement.
 - Relative mode turns off automatic edge switching in both directions. Press **Ctrl + Alt + Space** to share input and **Ctrl + Alt + Esc** to return locally. Entering game mode does not warp the remote cursor to the middle of the screen.
 - Games differ in whether they accept Windows-generated input. These changes have been compiled, but game behavior and pointer movement on the two devices have not been validated.
+
+In v0.1.3, normal sharing between two updated devices also sends relative mouse movement and receives the actual cursor position back from the receiving device. This prevents a stale absolute position from moving the cursor back after a game restores it when you release left or right click. Absolute positioning is used when initially crossing into the other desktop; relative game mode skips that initial repositioning as well. Older receivers retain the original normal-movement behavior, so update both devices for this fix.
+
+With fullscreen protection enabled, a receiving fullscreen game also pauses automatic switching back to this PC. Use the return shortcut when you finish playing.
+
+While any mouse button is held, automatic switching stays on the current device. After release, move the pointer at least 24 pixels away from the joining edge before crossing it again. Releasing a drag at an edge alone does not switch devices.
 
 Layout and mouse options are saved locally in `%LOCALAPPDATA%\DeskBridge\settings.json`. Pairing codes are not saved.
 
