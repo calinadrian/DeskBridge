@@ -1,4 +1,4 @@
-# DeskBridge · Windows preview 0.1.4
+# DeskBridge · Windows preview 0.1.5
 
 One keyboard and mouse for your Windows PC and Lenovo Legion Go.
 
@@ -23,13 +23,23 @@ Both devices must be on the same network. Ethernet and Wi-Fi can be mixed on the
 
 ## Arrange monitors
 
-On the sharing PC, click **Arrange monitors…**. Drag the Legion Go tile to the left, right, above, or below your selected local monitor. The edges snap together. Drag along the edge to adjust alignment, or use the Position and Alignment controls. The highlighted seam shows where the pointer can cross in either direction; parts of the edge without a touching screen do not switch devices.
+On the sharing PC, connect first, then click **Arrange monitors�**. Each remote display can be positioned independently. Select a remote tile and drag it below, above, left, or right of a PC monitor. The dropdowns and Alignment control provide the same adjustments. Green seams show where the pointer can switch in either direction. Save rejects overlapping tiles and remote displays without a switching seam.
 
-If either device has multiple monitors, the editor shows each physical display separately. Choose the local monitor and remote monitor that should connect. Drag the highlighted remote tile to position the remote group; its other monitors move with it and keep their arrangement from Windows settings. Each tile is numbered and shows its resolution. The remote primary display is listed first; these numbers are DeskBridge's own ordering and may differ from Windows display numbers.
+For a PC monitor with the Legion Go below it and the Go's external monitor on the right, place the Go tile **Below** and the external tile **Right**, both next to the PC monitor. You can cross the bottom edge into the Go and the right edge into its external monitor, and return through either corresponding edge.
 
-Connect both devices on v0.1.4 or newer to detect individual remote monitors. Older receivers still work as a single combined desktop tile. Use an exposed outside edge: an edge occupied by another monitor on either device remains available for that device's normal Windows switching. Green seams show the parts that can switch between devices; if no exposed seam remains, select another monitor or side. The shortcut still works without an exposed seam.
+Remote monitor numbers follow DeskBridge's detected order (primary first), which may differ from Windows display numbers. Both devices need v0.1.4 or newer for individual display detection. The sharing PC needs v0.1.5 for independent arrangement. Windows display settings on the Legion Go still control direct movement between its own two monitors; this editor sets crossings between the PC and each remote display. It does not change Windows display settings.
 
-Click **Save layout** to keep the selected monitors, side, and alignment between launches. Changing layout returns control locally before applying it. Remote monitor positions refresh every two seconds; unplugging or rearranging a remote monitor returns control locally if the layout changes. If the saved remote monitor is no longer present, the primary display is used instead. Reopen the editor after a display change to see the refreshed layout.
+Saved layouts and detected monitor sizes are remembered between launches. Connecting refreshes the detected screens; changing a display configuration returns control locally. Reopen the editor after adding, removing, or rearranging monitors.
+
+## Remember connections and start with Windows
+
+**Remember this connection on this Windows account** is enabled by default. After the first successful connection, the PC remembers the receiver address and pairing code. The receiving device keeps its certificate and pairing secret so the pairing remains valid after restarting. Credentials are encrypted by Windows for the signed-in user, in `%LOCALAPPDATA%\DeskBridge`, separately from the layout settings.
+
+Enable **Connect automatically when DeskBridge opens** on both devices to resume receiving and connecting when the app opens. It retries every 15 seconds if a device is offline or the connection ends. **Disconnect** and the receiver's stop shortcut cancel retries for the current run; click Connect/Receive to resume. Turning automatic connection off keeps the saved pairing available for one-click manual connection.
+
+Enable **Start DeskBridge with Windows** on each device to open it in the system tray when you sign in. This uses your Windows account's startup entry; keep the app in a permanent folder before enabling it. It can start with Windows while automatic connection is disabled. A second copy cannot start in the same Windows session.
+
+Use **Forget saved pairing** to disconnect, cancel automatic connection, and remove this device's saved credentials. Forget on the receiving device to invalidate the old code, then start receiving to create a new one. Unchecking Remember also disables automatic connection and removes saved credentials. If the receiver's network address changes, update it on the PC.
 
 ## Mouse jumping in games
 
@@ -44,7 +54,7 @@ With fullscreen protection enabled, a receiving fullscreen game also pauses auto
 
 While any mouse button is held, automatic switching stays on the current device. After release, move the pointer at least 24 pixels away from the joining edge before crossing it again. Releasing a drag at an edge alone does not switch devices.
 
-Layout and mouse options are saved locally in `%LOCALAPPDATA%\DeskBridge\settings.json`. Pairing codes are not saved.
+Layout and mouse options are saved locally in `%LOCALAPPDATA%\DeskBridge\settings.json`. Saved pairing credentials are encrypted separately for your Windows account when Remember is enabled.
 
 ## Updates from GitHub
 
@@ -54,7 +64,7 @@ When a new version is available, click **Update & restart**. The app downloads t
 
 The previous executable is kept beside the app as `DeskBridge.exe.previous`. If you need to recover it, close DeskBridge, rename the current executable to `DeskBridge-new.exe`, and rename `DeskBridge.exe.previous` to `DeskBridge.exe`. If the updater cannot launch the new executable, it restores the previous one. This does not detect problems that occur after the new app has launched.
 
-Each device updates separately. Updating disconnects the pair; open Receive control and pair again afterwards. You do not need Git or a GitHub account on either device. No update will be offered until there is a newer stable release. Old update downloads are removed after two days when the app starts again.
+Each device updates separately. Updating disconnects the pair; saved pairings remain available, and automatic connection can resume the session when enabled. You do not need Git or a GitHub account on either device. No update will be offered until there is a newer stable release. Old update downloads are removed after two days when the app starts again.
 
 ## Switching and stopping
 
@@ -76,12 +86,12 @@ The optional `Allow-Home-Network.ps1` file creates one inbound TCP rule for this
 
 - Windows 10/11 x64 only. Both devices need to be signed in to a normal desktop.
 - This build was compiled and packaged; live use across two devices has not been tested.
-- Keyboard, pointer movement, left/right/middle/back/forward buttons, and vertical/horizontal scrolling are implemented. Clipboard, file transfer, automatic discovery, automatic reconnection, and startup at sign-in are not included.
-- Each physical display is shown separately when both devices support monitor detection. A selected local and remote monitor can connect on an exposed side; the arrangement of monitors belonging to one device is set in Windows settings on that device. Pointer speed follows Windows pointer settings.
+- Keyboard, pointer movement, left/right/middle/back/forward buttons, and vertical/horizontal scrolling are implemented. Clipboard, file transfer, and automatic network discovery are not included.
+- Each physical display is shown separately when both devices support monitor detection. Each remote monitor can have its own crossing edge with a local monitor; direct movement between monitors on the same device still follows its Windows settings. Pointer speed follows Windows pointer settings.
 - Screen resolution changes are sent every two seconds. The app does not transmit video; each device keeps its own screen.
 - Normal Windows desktop apps are the intended use. Games with raw/relative mouse input, anti-cheat restrictions, and different keyboard layouts may need further work. No attempt is made to bypass game restrictions.
 - Windows UAC's secure desktop, sign-in, Ctrl + Alt + Delete, and lock-screen control are not supported. An app running as administrator may block injected input from DeskBridge running normally. Use the same permissions as your target app only when needed.
-- Keyboard and mouse data goes directly between the devices; it is not uploaded. There is no installer, background service, telemetry, or input recording. Update checks contact GitHub and identify the app version. Pairing uses a fresh certificate and 256-bit secret every time you start receiving. TLS validates the certificate fingerprint embedded in the pairing code. The app accepts one paired sender; codes are cleared from its window after pairing. A copied code remains in your clipboard until you replace it.
+- Keyboard and mouse data goes directly between the devices; it is not uploaded. There is no installer, background service, telemetry, or input recording. Update checks contact GitHub and identify the app version. Pairing uses a certificate and 256-bit secret, reused when Remember is enabled and recreated when it is disabled or the saved pairing is forgotten. TLS validates the certificate fingerprint embedded in the pairing code. The app accepts one paired sender; codes are cleared from its window after pairing. A copied code remains in your clipboard until you replace it.
 - DeskBridge is unsigned; Windows may show its usual warning for an unfamiliar downloaded app.
 
 ## Source and rebuilding

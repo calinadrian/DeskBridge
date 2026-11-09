@@ -13,6 +13,7 @@ internal sealed class InputCapture : IDisposable
     Native.POINT anchor;
     Point previousLocal;
     Rectangle activeLocalBounds;
+    ScreenLayout? activeRoute;
     double remoteX,remoteY;
     Size remoteSize=new(1920,1080);
     bool remoteReady, armed, remoteArmed, remoteFullscreen;
@@ -41,7 +42,7 @@ internal sealed class InputCapture : IDisposable
             throw new Win32Exception(Marshal.GetLastWin32Error(),"Unable to capture keyboard and mouse.");
         }
         Native.GetCursorPos(out var initial); previousLocal=new Point(initial.X,initial.Y);
-        guard.Tick+=(_,_) => { if(Active && (Connection?.Alive!=true || Layout.LocalBounds!=activeLocalBounds)) ReturnLocal(); };
+        guard.Tick+=(_,_) => { if(Active && (Connection?.Alive!=true || (activeRoute ?? Layout).LocalBounds!=activeLocalBounds)) ReturnLocal(); };
         guard.Start();
     }
     public void SetRemoteSize(int width,int height,int protocol=0)
@@ -71,8 +72,11 @@ internal sealed class InputCapture : IDisposable
         if(edge && (RelativeActive || (PauseFullscreen && Native.FullscreenForeground()))) return;
         Native.GetCursorPos(out var current);
         var entry=edgePoint ?? new Point(current.X,current.Y);
-        var remote=Layout.RemoteBounds(remoteSize);
-        var selected=Layout.SelectedRemote(remoteSize);
+        var route=edge ? Layout.Routes(remoteSize).FirstOrDefault(r=>r.AtJoiningEdge(entry,remoteSize)) : Layout.Routes(remoteSize).OrderByDescending(r=>r.RemoteMonitor==Layout.RemoteMonitor).FirstOrDefault();
+        if(route==null) return;
+        activeRoute=route;
+        var remote=route.RemoteBounds(remoteSize);
+        var selected=route.SelectedRemote(remoteSize);
         remoteX=edge ? Math.Clamp(entry.X-remote.Left,selected.Left+1,selected.Right-2) : selected.Left+selected.Width/2;
         remoteY=edge ? Math.Clamp(entry.Y-remote.Top,selected.Top+1,selected.Bottom-2) : selected.Top+selected.Height/2;
         var screen=Screen.FromPoint(new Point(current.X,current.Y)).Bounds;
@@ -81,17 +85,18 @@ internal sealed class InputCapture : IDisposable
         // Release keys that Windows already saw locally before interception began.
         foreach(var key in physicalKeys) { try { Native.Key(key,0,true,false); } catch { } }
         forwardedKeys.Clear();
-        activeLocalBounds=Layout.LocalBounds; Active=true; remoteArmed=true;
+        activeLocalBounds=route.LocalBounds; Active=true; remoteArmed=true;
         if(!Connection.Send(new Packet(Kind.Start,C:3))) { ReturnLocal(); return; }
         if(!RelativeActive) SendPosition();
         Changed?.Invoke(true);
     }
-    public void ReturnLocal()
+    public void ReturnLocal(ScreenLayout? crossingRoute=null)
     {
         if(!Active) return;
         Active=false; forwardedKeys.Clear();
         Connection?.Send(new Packet(Kind.Release));
-        var point=Layout.ReturnPoint(remoteX,remoteY,remoteSize);
+        var route=crossingRoute ?? Layout.Routes(remoteSize).FirstOrDefault(r=>r.SelectedRemote(remoteSize).Contains((int)remoteX,(int)remoteY)) ?? activeRoute ?? Layout;
+        var point=route.ReturnPoint(remoteX,remoteY,remoteSize);
         Native.SetCursorPos(point.X,point.Y);
         previousLocal=point;
         armed=false; cooldown=Environment.TickCount64+700;
@@ -116,11 +121,16 @@ internal sealed class InputCapture : IDisposable
         }
         if(!Active) {
             if(msg==0x200) {
-                var b=Layout.LocalBounds;
+                var b=Screen.FromPoint(new Point(m.Point.X,m.Point.Y)).Bounds;
                 if(physicalButtons.Count==0 && m.Point.X>b.Left+24 && m.Point.X<b.Right-25 && m.Point.Y>b.Top+24 && m.Point.Y<b.Bottom-25) armed=true;
                 var current=new Point(m.Point.X,m.Point.Y);
-                bool edge=Layout.TryCrossing(previousLocal,current,remoteSize,out var crossing);
-                if(!edge) { crossing=current; edge=Layout.AtJoiningEdge(current,remoteSize); }
+                Point crossing=current;
+                bool edge=false;
+                foreach(var route in Layout.Routes(remoteSize)) {
+                    if(route.TryCrossing(previousLocal,current,remoteSize,out var candidate) || route.AtJoiningEdge(current,remoteSize)) {
+                        crossing=route.AtJoiningEdge(candidate,remoteSize) ? candidate : current; edge=true; break;
+                    }
+                }
                 previousLocal=current;
                 if(EdgeEnabled && armed && edge && Environment.TickCount64>cooldown && physicalKeys.Count==0 && physicalButtons.Count==0)
                 {
@@ -140,12 +150,17 @@ internal sealed class InputCapture : IDisposable
             }
             double previousX=remoteX,previousY=remoteY;
             remoteX+=dx; remoteY+=dy;
-            bool crossed=Layout.CanReturn(remoteX,remoteY,previousX,previousY,remoteSize);
-            if(crossed && remoteArmed && !(PauseFullscreen && remoteFullscreen) && physicalKeys.Count==0 && physicalButtons.Count==0) ReturnLocal();
+            var returnRoute=Layout.Routes(remoteSize).FirstOrDefault(r=>r.CanReturn(remoteX,remoteY,previousX,previousY,remoteSize));
+            bool crossed=returnRoute!=null;
+            if(returnRoute!=null) activeRoute=returnRoute;
+            if(crossed && remoteArmed && !(PauseFullscreen && remoteFullscreen) && physicalKeys.Count==0 && physicalButtons.Count==0) {
+                ReturnLocal(returnRoute);
+            }
             else {
                 remoteX=Math.Clamp(remoteX,0,remoteSize.Width-1); remoteY=Math.Clamp(remoteY,0,remoteSize.Height-1);
-                var selected=Layout.SelectedRemote(remoteSize);
-                bool away=Layout.Side switch {
+                var route=Layout.Routes(remoteSize).FirstOrDefault(r=>r.SelectedRemote(remoteSize).Contains((int)remoteX,(int)remoteY)) ?? activeRoute ?? Layout;
+                var selected=route.SelectedRemote(remoteSize);
+                bool away=route.Side switch {
                     ScreenSide.Right=>remoteX>selected.Left+24, ScreenSide.Left=>remoteX<selected.Right-25,
                     ScreenSide.Above=>remoteY<selected.Bottom-25, _=>remoteY>selected.Top+24
                 };

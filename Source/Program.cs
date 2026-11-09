@@ -11,6 +11,8 @@ internal static class Program
             return;
         }
         Updater.CleanOldDownloads();
-        Application.Run(new MainForm());
+        using var single=new Mutex(true,@"Local\DeskBridge-"+Environment.UserName,out bool firstInstance);
+        if(!firstInstance) return;
+        Application.Run(new MainForm(args.Contains("--startup")));
     }
 }

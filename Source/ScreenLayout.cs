@@ -5,13 +5,26 @@ namespace DeskBridge;
 
 internal enum ScreenSide { Right, Left, Above, Below }
 
+internal sealed record MonitorPlacement(int Index, string LocalMonitor, ScreenSide Side, int OffsetPercent);
+
 internal sealed record ScreenLayout
 {
+    public MonitorPlacement[] Placements { get; init; }=Array.Empty<MonitorPlacement>();
+    public IEnumerable<ScreenLayout> Routes(Size size)
+    {
+        if(Placements.Length==0 || RemoteScreens.Length==0) { yield return this with { Placements=Array.Empty<MonitorPlacement>() }; yield break; }
+        foreach(var placement in Placements) {
+            if(placement.Index<0 || placement.Index>=RemoteScreens.Length) continue;
+            yield return this with { Placements=Array.Empty<MonitorPlacement>(), RemoteMonitor=placement.Index,
+                Independent=true, Monitor=placement.LocalMonitor, Side=placement.Side, OffsetPercent=placement.OffsetPercent };
+        }
+    }
     public ScreenSide Side { get; init; }=ScreenSide.Right;
     public int OffsetPercent { get; init; }
     public string Monitor { get; init; }="";
+    [JsonIgnore] public bool Independent { get; init; }
     public int RemoteMonitor { get; init; }
-    [JsonIgnore] public Rectangle[] RemoteScreens { get; init; }=Array.Empty<Rectangle>();
+    public Rectangle[] RemoteScreens { get; init; }=Array.Empty<Rectangle>();
     public Rectangle SelectedRemote(Size size) => RemoteScreens.Length==0 ? new Rectangle(Point.Empty,size) : RemoteScreens[RemoteMonitor>=0 && RemoteMonitor<RemoteScreens.Length ? RemoteMonitor : 0];
     [JsonIgnore]
     public Rectangle LocalBounds => (Screen.AllScreens.FirstOrDefault(s=>s.DeviceName==Monitor) ?? Screen.PrimaryScreen ?? Screen.AllScreens[0]).Bounds;
@@ -47,7 +60,7 @@ internal sealed record ScreenLayout
         spans.Add((start,end));
         int line=Side switch { ScreenSide.Right=>portal.Left-1,ScreenSide.Left=>portal.Right,ScreenSide.Above=>portal.Bottom,_=>portal.Top-1 };
         var selected=SelectedRemote(size);
-        foreach(var screen in RemoteScreens) {
+        foreach(var screen in Independent ? Array.Empty<Rectangle>() : RemoteScreens) {
             if(screen==selected) continue;
             var r=new Rectangle(origin.Left+screen.Left,origin.Top+screen.Top,screen.Width,screen.Height);
             if(horizontal ? line<r.Left || line>=r.Right : line<r.Top || line>=r.Bottom) continue;
@@ -126,7 +139,7 @@ internal sealed record ScreenLayout
             ScreenSide.Above=>new Point(alongX,b.Top+12), _=>new Point(alongX,b.Bottom-13)
         };
     }
-    public override string ToString() => $"Legion Go: {Side.ToString().ToLowerInvariant()} · alignment {OffsetPercent:+0;-0;0}%";
+    public override string ToString() => Placements.Length>0 ? $"{Placements.Length} independently arranged remote monitor(s)" : $"Legion Go: {Side.ToString().ToLowerInvariant()} · alignment {OffsetPercent:+0;-0;0}%";
 }
 
 internal sealed record Preferences
@@ -136,6 +149,11 @@ internal sealed record Preferences
     public bool PauseFullscreen { get; init; }=true;
     public bool RelativeMouse { get; init; }
     public bool LockLocal { get; init; }
+    public bool ReceiveMode { get; init; }
+    public string Address { get; init; }="";
+    public bool RememberConnection { get; init; }=true;
+    public bool AutoConnect { get; init; }
+    public bool StartWithWindows { get; init; }
     static string FilePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"DeskBridge","settings.json");
     public static Preferences Load()
     {

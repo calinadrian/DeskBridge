@@ -17,6 +17,12 @@ internal sealed class MainForm : Form
     readonly CheckBox fullscreen=new() { Text="Pause edge switching in fullscreen apps and games", Checked=true, AutoSize=true };
     readonly CheckBox lockLocal=new() { Text="Lock control to this PC (for games)", AutoSize=true };
     readonly CheckBox relative=new() { Text="Relative mouse for remote games — switch with shortcut only", AutoSize=true };
+    readonly CheckBox remember=new() { Text="Remember this connection on this Windows account",AutoSize=true };
+    readonly CheckBox automatic=new() { Text="Connect automatically when DeskBridge opens (retry if offline)",AutoSize=true };
+    readonly CheckBox startup=new() { Text="Start DeskBridge with Windows",AutoSize=true };
+    readonly Button forget=new() { Text="Forget saved pairing",AutoSize=true };
+    readonly System.Windows.Forms.Timer reconnect=new() { Interval=15000 };
+    bool reconnectWanted,changingStartup;
     Preferences preferences=Preferences.Load();
     readonly Button action=new() { Text="Connect", AutoSize=true, MinimumSize=new Size(170,42) };
     readonly Button stop=new() { Text="Disconnect", AutoSize=true, Enabled=false, MinimumSize=new Size(130,42) };
@@ -44,7 +50,7 @@ internal sealed class MainForm : Form
     int expectedDisplays;
     readonly List<Rectangle> incomingDisplays=new();
 
-    public MainForm()
+    public MainForm(bool startupLaunch=false)
     {
         Text="DeskBridge "+Updater.DisplayVersion; ClientSize=new Size(700,820); MinimumSize=new Size(640,680);
         StartPosition=FormStartPosition.CenterScreen;
@@ -77,14 +83,39 @@ internal sealed class MainForm : Form
         copy.Margin=new Padding(0,6,0,12); root.Controls.Add(copy);
         var buttons=new FlowLayoutPanel { AutoSize=true, Margin=new Padding(0,4,0,12) };
         buttons.Controls.Add(action); buttons.Controls.Add(stop); root.Controls.Add(buttons);
+        remember.Checked=preferences.RememberConnection; automatic.Checked=preferences.AutoConnect; startup.Checked=preferences.StartWithWindows;
+        automatic.Enabled=remember.Checked;
+        root.Controls.Add(remember); root.Controls.Add(automatic); root.Controls.Add(startup); root.Controls.Add(forget);
         root.Controls.Add(status);
         local.Margin=new Padding(0,10,0,12); root.Controls.Add(local);
         root.Controls.Add(new Label { Text="Ctrl + Alt + Space  ·  Switch devices\nCtrl + Alt + Esc  ·  Return here / stop receiving\n\nKeep both devices on the same home network.\nMinimize to keep DeskBridge running in the tray; closing exits.", AutoSize=true, ForeColor=Color.FromArgb(169,181,200), Margin=new Padding(0,12,0,0) });
         Style(root);
-        share.CheckedChanged+=(_,_) => Mode();
+        address.Text=preferences.Address;
+        receive.Checked=preferences.ReceiveMode; share.Checked=!preferences.ReceiveMode;
+        share.CheckedChanged+=(_,_) => { if(share.Checked || receive.Checked) { Mode(); PersistConnectionOptions(); } };
+        address.TextChanged+=(_,_) => PersistConnectionOptions();
+        remember.CheckedChanged+=(_,_) => {
+            automatic.Enabled=remember.Checked;
+            if(!remember.Checked) {
+                automatic.Checked=false; reconnectWanted=false;
+                try { SavedConnection.Forget(); } catch(Exception ex) { SetStatus("Could not forget pairing: "+ex.Message); }
+            }
+            PersistConnectionOptions();
+        };
+        automatic.CheckedChanged+=(_,_) => { reconnectWanted=automatic.Checked; stop.Enabled=session!=null || reconnectWanted; PersistConnectionOptions(); };
+        startup.CheckedChanged+=(_,_) => {
+            if(changingStartup) return;
+            try { SavedConnection.SetStartup(startup.Checked); PersistConnectionOptions(); }
+            catch(Exception ex) { changingStartup=true; startup.Checked=preferences.StartWithWindows; changingStartup=false; SetStatus("Could not change Windows startup: "+ex.Message); }
+        };
+        forget.Click+=(_,_) => {
+            reconnectWanted=false; automatic.Checked=false; StopSession("Saved pairing forgotten. Create a new code on the receiving device.");
+            try { SavedConnection.Forget(); code.Clear(); } catch(Exception ex) { SetStatus("Could not forget pairing: "+ex.Message); }
+        };
+        reconnect.Tick+=async (_,_) => { if(reconnectWanted && session==null) await BeginSession(); };
         arrange.Click+=(_,_) => {
             capture?.ReturnLocal();
-            using var dialog=new LayoutDialog(preferences.Layout with { RemoteScreens=capture?.RemoteScreens ?? Array.Empty<Rectangle>() },capture?.RemoteSize ?? new Size(1920,1080),capture?.RemoteReady==true);
+            using var dialog=new LayoutDialog(preferences.Layout with { RemoteScreens=capture?.RemoteScreens ?? preferences.Layout.RemoteScreens },capture?.RemoteSize ?? new Size(1920,1080),capture?.RemoteReady==true);
             if(dialog.ShowDialog(this)!=DialogResult.OK) return;
             preferences=preferences with { Layout=dialog.LayoutValue }; SavePreferences();
         };
@@ -92,8 +123,8 @@ internal sealed class MainForm : Form
         fullscreen.CheckedChanged+=(_,_) => SavePreferences();
         lockLocal.CheckedChanged+=(_,_) => SavePreferences();
         relative.CheckedChanged+=(_,_) => SavePreferences();
-        action.Click+=async (_,_) => await BeginSession();
-        stop.Click+=(_,_) => StopSession("Disconnected. Control is local.");
+        action.Click+=async (_,_) => { reconnectWanted=automatic.Checked; await BeginSession(); };
+        stop.Click+=(_,_) => { reconnectWanted=false; StopSession("Disconnected. Control is local."); };
         local.Click+=(_,_) => capture?.ReturnLocal();
         copy.Click+=(_,_) => { try { Clipboard.SetText(code.Text); SetStatus("Pairing code copied."); } catch { SetStatus("Clipboard is busy. Select the code and copy it manually."); } };
         dimensions.Tick+=(_,_) => SendDimensions();
@@ -102,13 +133,19 @@ internal sealed class MainForm : Form
         var menu=new ContextMenuStrip();
         menu.Items.Add("Open DeskBridge",null,(_,_) => Open());
         menu.Items.Add("Return control here",null,(_,_) => capture?.ReturnLocal());
-        menu.Items.Add("Disconnect",null,(_,_) => StopSession("Disconnected. Control is local."));
+        menu.Items.Add("Disconnect",null,(_,_) => { reconnectWanted=false; StopSession("Disconnected. Control is local."); });
         menu.Items.Add("Updates",null,async (_,_) => { Open(); await CheckUpdate(); });
         menu.Items.Add("Exit",null,(_,_) => Close());
         tray.ContextMenuStrip=menu; tray.DoubleClick+=(_,_) => Open();
         Resize+=(_,_) => { if(WindowState==FormWindowState.Minimized) Hide(); };
-        FormClosing+=(_,_) => { lifetime.Cancel(); updateTimer.Dispose(); StopSession(""); dimensions.Dispose(); tray.Visible=false; tray.Dispose(); };
-        Shown+=async (_,_) => { updateTimer.Start(); await CheckUpdate(); };
+        FormClosing+=(_,_) => { lifetime.Cancel(); reconnectWanted=false; reconnect.Dispose(); updateTimer.Dispose(); StopSession(""); dimensions.Dispose(); tray.Visible=false; tray.Dispose(); };
+        Shown+=async (_,_) => {
+            updateTimer.Start(); reconnect.Start();
+            reconnectWanted=automatic.Checked && remember.Checked;
+            if(startupLaunch) { WindowState=FormWindowState.Minimized; Hide(); }
+            if(reconnectWanted) _=BeginSession();
+            await CheckUpdate();
+        };
         Mode();
     }
     static void Style(Control control)
@@ -125,15 +162,24 @@ internal sealed class MainForm : Form
     {
         senderPanel.Visible=share.Checked; copy.Visible=receive.Checked; code.ReadOnly=receive.Checked;
         code.Clear(); ips.Text="";
-        action.Text=share.Checked ? "Connect" : "Create pairing code";
+        if(share.Checked && preferences.RememberConnection) {
+            try { code.Text=SavedConnection.SenderCode(); } catch(Exception ex) { SetStatus("Could not read saved pairing: "+ex.Message); }
+        }
+        action.Text=share.Checked ? "Connect" : "Receive / show pairing code";
         help.Text=share.Checked
             ? "On the Legion Go, choose Receive control and create a pairing code.\nEnter its address and paste its code here."
             : "Create a pairing code here, then enter it on the PC with your keyboard\nand mouse. Only a device with this code can connect.";
     }
+    void PersistConnectionOptions()
+    {
+        preferences=preferences with { ReceiveMode=receive.Checked,Address=address.Text.Trim(),RememberConnection=remember.Checked,
+            AutoConnect=automatic.Checked && remember.Checked,StartWithWindows=startup.Checked };
+        try { preferences.Save(); } catch(Exception ex) { SetStatus("Could not save connection options: "+ex.Message); }
+    }
     void Busy(bool busy)
     {
-        share.Enabled=receive.Enabled=!busy; address.Enabled=!busy; action.Enabled=!busy;
-        code.ReadOnly=busy || receive.Checked; stop.Enabled=busy; copy.Enabled=busy && receiving;
+        share.Enabled=receive.Enabled=remember.Enabled=!busy; address.Enabled=!busy; action.Enabled=!busy;
+        code.ReadOnly=busy || receive.Checked; stop.Enabled=busy || reconnectWanted; copy.Enabled=busy && receiving;
         local.Enabled=busy && !receiving;
     }
     void SetStatus(string text) { status.Text=text; }
@@ -204,6 +250,10 @@ internal sealed class MainForm : Form
     {
         if(session!=null) return;
         receiving=receive.Checked;
+        PersistConnectionOptions();
+        if(!receiving && string.IsNullOrWhiteSpace(code.Text) && remember.Checked) {
+            try { code.Text=SavedConnection.SenderCode(); } catch(Exception ex) { SetStatus("Could not read saved pairing: "+ex.Message); return; }
+        }
         if(!receiving && (string.IsNullOrWhiteSpace(address.Text)||string.IsNullOrWhiteSpace(code.Text))) {
             SetStatus("Enter the Legion Go address and pairing code first."); return;
         }
@@ -213,8 +263,9 @@ internal sealed class MainForm : Form
             if(receiving) {
                 if(!Native.RegisterHotKey(Handle,1,0x4003,0x1B))
                     throw new InvalidOperationException("Ctrl + Alt + Esc is already in use. Close the other app using it, then try again.");
-                using var cert=Connection.Certificate();
-                var secret=RandomNumberGenerator.GetBytes(32);
+                var identity=SavedConnection.Receiver(remember.Checked);
+                using var cert=identity.Certificate;
+                var secret=identity.Secret;
                 listener=new TcpListener(IPAddress.Any,Connection.Port); listener.Start(1);
                 code.Text=Connection.PairCode(cert,secret);
                 ips.Text="This device: "+string.Join("  /  ",LocalAddresses());
@@ -234,7 +285,8 @@ internal sealed class MainForm : Form
                 }
             } else {
                 SetStatus("Connecting securely…");
-                var paired=await Connection.Connect(address.Text,code.Text,current.Token);
+                var pairingCode=code.Text.Trim();
+                var paired=await Connection.Connect(address.Text,pairingCode,current.Token);
                 if(session!=current || current.IsCancellationRequested) { paired.Dispose(); return; }
                 try { capture=new InputCapture {
                     Layout=preferences.Layout with { RemoteScreens=Array.Empty<Rectangle>() }, EdgeEnabled=edges.Checked, PauseFullscreen=fullscreen.Checked,
@@ -245,12 +297,16 @@ internal sealed class MainForm : Form
                     else ShowConnectedStatus();
                     tray.Text=active ? "DeskBridge — controlling Legion Go" : "DeskBridge — local control";
                 };
+                if(remember.Checked) {
+                    try { SavedConnection.SaveSender(pairingCode); }
+                    catch { capture.Dispose(); capture=null; paired.Dispose(); throw; }
+                }
                 Attach(paired); capture.Connection=paired;
                 SetStatus("Connected — waiting for the Legion Go screen size…");
                 code.Clear();
             }
         } catch(Exception ex) {
-            if(session==current) StopSession(current.IsCancellationRequested ? "Disconnected." : "Could not connect: "+ex.Message);
+            if(session==current) StopSession(current.IsCancellationRequested ? "Disconnected." : (ex is OperationCanceledException ? "Connection timed out. Check that the receiver is running and its address and firewall allow the connection." : "Could not connect: "+ex.Message)+(reconnectWanted ? " Retrying in 15 seconds�" : ""));
         }
     }
     void Attach(Connection paired)
@@ -293,7 +349,12 @@ internal sealed class MainForm : Form
                 }
                 incomingDisplays.Add(new Rectangle(p.A,p.B,p.C,p.D));
                 if(incomingDisplays.Count==expectedDisplays) {
-                    capture.SetRemoteScreens(incomingDisplays.ToArray()); expectedDisplays=0;
+                    var detected=incomingDisplays.ToArray();
+                    capture.SetRemoteScreens(detected); expectedDisplays=0;
+                    if(!preferences.Layout.RemoteScreens.SequenceEqual(detected)) {
+                        preferences=preferences with { Layout=preferences.Layout with { RemoteScreens=detected } };
+                        try { preferences.Save(); } catch(Exception ex) { SetStatus("Could not save detected monitors: "+ex.Message); }
+                    }
                     layoutSummary.Text=preferences.Layout+ $" · {incomingDisplays.Count} remote monitor(s)";
                 }
             });
@@ -303,7 +364,7 @@ internal sealed class MainForm : Form
         };
         paired.Closed+=() => {
             target?.Close();
-            UI(() => { if(connection==paired) StopSession("Connection ended. Control is local. Connect again to resume."); });
+            UI(() => { if(connection==paired) StopSession(reconnectWanted ? "Connection ended. Control is local. Reconnecting in 15 seconds�" : "Connection ended. Control is local. Connect again to resume."); });
         };
         paired.Start();
         if(receiving) { SendDimensions(); dimensions.Start(); }
@@ -340,7 +401,7 @@ internal sealed class MainForm : Form
         .Select(a => a.Address.ToString()).Distinct();
     protected override void WndProc(ref Message m)
     {
-        if(m.Msg==0x312 && m.WParam.ToInt32()==1) { StopSession("Receiving stopped. Create a new pairing code to reconnect."); Open(); }
+        if(m.Msg==0x312 && m.WParam.ToInt32()==1) { reconnectWanted=false; StopSession("Receiving stopped. Create a new pairing code to reconnect."); Open(); }
         base.WndProc(ref m);
     }
 }
