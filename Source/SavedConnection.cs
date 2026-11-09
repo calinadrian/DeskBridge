@@ -46,7 +46,13 @@ internal static class SavedConnection
     {
         if(remember && Load("receiver.dat") is byte[] bytes) {
             var identity=JsonSerializer.Deserialize<Identity>(bytes) ?? throw new IOException("Saved pairing is invalid.");
-            return (new X509Certificate2(Convert.FromBase64String(identity.Certificate)),Convert.FromBase64String(identity.Secret));
+            var certificate=new X509Certificate2(Convert.FromBase64String(identity.Certificate),(string?)null,X509KeyStorageFlags.Exportable | X509KeyStorageFlags.UserKeySet);
+            try {
+                var loadedSecret=Convert.FromBase64String(identity.Secret);
+                if(!certificate.HasPrivateKey || loadedSecret.Length!=32 || certificate.NotAfter<=DateTime.Now)
+                    throw new CryptographicException("The saved pairing is incomplete or expired. Use Forget saved pairing, then start receiving again.");
+                return (certificate,loadedSecret);
+            } catch { certificate.Dispose(); throw; }
         }
         var cert=Connection.Certificate(); var secret=RandomNumberGenerator.GetBytes(32);
         try {

@@ -33,7 +33,7 @@ internal sealed class Connection : IDisposable
         using var rsa=RSA.Create(2048);
         var request=new CertificateRequest("CN=DeskBridge", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         using var cert=request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddYears(10));
-        return new X509Certificate2(cert.Export(X509ContentType.Pfx));
+        return new X509Certificate2(cert.Export(X509ContentType.Pfx),(string?)null,X509KeyStorageFlags.Exportable | X509KeyStorageFlags.UserKeySet);
     }
     public static string PairCode(X509Certificate2 cert, byte[] secret) =>
         "DB1-"+Convert.ToHexString(SHA256.HashData(cert.RawData))+"-"+Convert.ToHexString(secret);

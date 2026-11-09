@@ -23,8 +23,8 @@ internal sealed class LayoutDialog : Form
         outer.RowStyles.Add(new RowStyle(SizeType.AutoSize)); outer.RowStyles.Add(new RowStyle(SizeType.AutoSize)); Controls.Add(outer);
         var fields=new FlowLayoutPanel { AutoSize=true,Dock=DockStyle.Fill };
         var detected=layout.RemoteScreens.Length>0 ? layout.RemoteScreens : new[] { new Rectangle(Point.Empty,remoteSize) };
-        for(int i=0;i<detected.Length;i++) remote.Items.Add($"Remote {i+1}: {detected[i].Width} × {detected[i].Height}");
-        foreach(var item in screens.Select((s,i)=>(s,i))) local.Items.Add($"This PC {item.i+1}: {item.s.Bounds.Width} × {item.s.Bounds.Height}");
+        for(int i=0;i<detected.Length;i++) remote.Items.Add($"Remote {i+1}: {detected[i].Width} \u00d7 {detected[i].Height}");
+        foreach(var item in screens.Select((s,i)=>(s,i))) local.Items.Add($"This PC {item.i+1}: {item.s.Bounds.Width} \u00d7 {item.s.Bounds.Height}");
         side.Items.AddRange(new object[] { "Right","Left","Above","Below" });
         fields.Controls.Add(new Label { Text="Move monitor",AutoSize=true,Padding=new Padding(0,5,0,0) }); fields.Controls.Add(remote);
         fields.Controls.Add(new Label { Text="Next to",AutoSize=true,Padding=new Padding(0,5,0,0) }); fields.Controls.Add(local); fields.SetFlowBreak(local,true);

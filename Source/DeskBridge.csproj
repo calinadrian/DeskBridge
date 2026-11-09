@@ -5,8 +5,9 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <CodePage>65001</CodePage>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>DeskBridge</AssemblyName>
-    <Version>0.1.5</Version>
+    <Version>0.1.6</Version>
   </PropertyGroup>
 </Project>

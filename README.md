@@ -1,13 +1,21 @@
-# DeskBridge · Windows preview 0.1.5
+# DeskBridge · Windows preview 0.1.6
 
 One keyboard and mouse for your Windows PC and Lenovo Legion Go.
 
 [Download the latest Windows release](https://github.com/calinadrian/DeskBridge/releases/latest) · [Source repository](https://github.com/calinadrian/DeskBridge)
 
+## Version 0.1.6
+
+Fixes a certificate export error introduced with saved pairing in 0.1.5 ("Key not valid for use in specified state"). The window now has Connection, Monitors & input, and Settings & updates tabs. Connection buttons and status stay visible below the tabs, and content adapts to window size and display scaling. Labels are encoded consistently across build machines.
+
+Open **Settings & updates** for startup, remembering, automatic connection, and forgetting a pairing. Local pairing/key errors stop retrying and display recovery instructions; temporary network failures can still retry. If an older saved pairing cannot be read, use **Forget saved pairing**, start receiving again, and copy the new code to the sharing PC.
+
+Update checks use a public release manifest instead of the GitHub API quota. If 0.1.5 cannot check for updates because of GitHub's rate limit, download 0.1.6 from the release page manually, close DeskBridge, and replace its executable on both devices. Build success does not establish live device or visual correctness; device testing remains unverified.
+
 ## Start on the Legion Go
 
 1. Extract the downloaded ZIP, copy its folder to the Legion Go, and open `DeskBridge.exe`.
-2. Choose **Receive control on this device**, then **Create pairing code**.
+2. On **Connection**, choose **Receive control on this device**, then **Start receiving**.
 3. If Windows asks about network access, allow it on your **private/home network**.
 4. Keep the app open. It shows this device's address and a private pairing code.
 
@@ -23,7 +31,7 @@ Both devices must be on the same network. Ethernet and Wi-Fi can be mixed on the
 
 ## Arrange monitors
 
-On the sharing PC, connect first, then click **Arrange monitors�**. Each remote display can be positioned independently. Select a remote tile and drag it below, above, left, or right of a PC monitor. The dropdowns and Alignment control provide the same adjustments. Green seams show where the pointer can switch in either direction. Save rejects overlapping tiles and remote displays without a switching seam.
+On the sharing PC, connect first, then click **Arrange monitors�**. Each remote display can be positioned independently. Select a remote tile and drag it below, above, left, or right of a PC monitor. The dropdowns and Alignment control provide the same adjustments. Green seams show where the pointer can switch in either direction. Save rejects overlapping tiles and remote displays without a switching seam.
 
 For a PC monitor with the Legion Go below it and the Go's external monitor on the right, place the Go tile **Below** and the external tile **Right**, both next to the PC monitor. You can cross the bottom edge into the Go and the right edge into its external monitor, and return through either corresponding edge.
 
@@ -58,7 +66,7 @@ Layout and mouse options are saved locally in `%LOCALAPPDATA%\DeskBridge\setting
 
 ## Updates from GitHub
 
-DeskBridge checks this repository's latest stable GitHub Release when it opens and every six hours while running. You can also click **Check for updates**. Checks do not interrupt a connection and never install silently.
+DeskBridge checks a manifest attached to this repository's latest stable GitHub Release when it opens and every six hours while running. You can also click **Check for updates**. Checks do not interrupt a connection and never install silently. The manifest avoids unauthenticated GitHub API rate limits; older releases without a manifest use the API fallback.
 
 When a new version is available, click **Update & restart**. The app downloads the Windows executable over HTTPS, verifies its SHA-256 checksum and file version, disconnects safely, replaces itself, and restarts. Keep its filename as `DeskBridge.exe` and keep the folder in a writable location such as Documents. Windows may block replacing an app that another instance is using; close the other instance before updating.
 
@@ -106,6 +114,6 @@ The executable includes its runtime. No separate .NET installation is needed on 
 
 For complete release assets, run `./scripts/publish.ps1` in PowerShell. To publish a new update, bump `<Version>` in `Source/DeskBridge.csproj`, commit and push it, then push the matching tag (for example `v0.1.2`). The GitHub Actions release workflow builds the executable, checksum, and portable ZIP and publishes the release. The tag must match the app version. Only stable releases are offered by the updater.
 
-Update assets are `DeskBridge-win-x64.exe` and `DeskBridge-win-x64.exe.sha256`. The checksum protects download integrity; it is not a digital signature. Repository publishing access controls who can ship updates.
+Update assets are `DeskBridge-win-x64.exe`, `DeskBridge-win-x64.exe.sha256`, and `DeskBridge-update.json`. The checksum protects download integrity; it is not a digital signature. Repository publishing access controls who can ship updates.
 
 Implementation references: [Windows keyboard hooks](https://learn.microsoft.com/en-us/windows/win32/winmsg/lowlevelkeyboardproc), [Windows SendInput](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput), [.NET TLS streams](https://learn.microsoft.com/en-us/dotnet/api/system.net.security.sslstream).

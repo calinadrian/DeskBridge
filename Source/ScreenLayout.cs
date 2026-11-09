@@ -139,7 +139,7 @@ internal sealed record ScreenLayout
             ScreenSide.Above=>new Point(alongX,b.Top+12), _=>new Point(alongX,b.Bottom-13)
         };
     }
-    public override string ToString() => Placements.Length>0 ? $"{Placements.Length} independently arranged remote monitor(s)" : $"Legion Go: {Side.ToString().ToLowerInvariant()} · alignment {OffsetPercent:+0;-0;0}%";
+    public override string ToString() => Placements.Length>0 ? $"{Placements.Length} independently arranged remote monitor(s)" : $"Legion Go: {Side.ToString().ToLowerInvariant()} \u00b7 alignment {OffsetPercent:+0;-0;0}%";
 }
 
 internal sealed record Preferences

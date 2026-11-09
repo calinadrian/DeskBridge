@@ -29,6 +29,30 @@ internal static class Updater
     {
         using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(20));
+        // Public release assets do not consume GitHub's unauthenticated API quota.
+        using var manifest=await Http.GetAsync($"https://github.com/{Repository}/releases/latest/download/DeskBridge-update.json",HttpCompletionOption.ResponseHeadersRead,timeout.Token);
+        if(manifest.IsSuccessStatusCode) {
+            if(manifest.Content.Headers.ContentLength>16384) throw new IOException("Invalid update manifest.");
+            await using var input=await manifest.Content.ReadAsStreamAsync(timeout.Token);
+            var buffer=new byte[16385]; int length=0;
+            while(length<buffer.Length) {
+                int count=await input.ReadAsync(buffer.AsMemory(length),timeout.Token);
+                if(count==0) break;
+                length+=count;
+            }
+            if(length>16384) throw new IOException("Invalid update manifest.");
+            using var info=JsonDocument.Parse(buffer.AsMemory(0,length));
+            var entry=info.RootElement;
+            var releaseTag=entry.GetProperty("tag").GetString() ?? "";
+            if(!Version.TryParse(entry.GetProperty("version").GetString(),out var releaseVersion) || releaseTag!="v"+releaseVersion.ToString())
+                throw new IOException("Invalid update version.");
+            if(releaseVersion<=Current) return null;
+            return new ReleaseUpdate(releaseVersion,releaseTag,
+                ValidateUrl($"https://github.com/{Repository}/releases/download/{releaseTag}/{Asset}",releaseTag,Asset),
+                ValidateUrl($"https://github.com/{Repository}/releases/download/{releaseTag}/{Asset}.sha256",releaseTag,Asset+".sha256"));
+        }
+        if(manifest.StatusCode!=HttpStatusCode.NotFound) manifest.EnsureSuccessStatusCode();
+        // Older releases had no manifest. Keep a fallback for that transition.
         using var response=await Http.GetAsync($"https://api.github.com/repos/{Repository}/releases/latest",timeout.Token);
         if(response.StatusCode==HttpStatusCode.NotFound) throw new IOException("No published release is available yet.");
         if(response.StatusCode==HttpStatusCode.Forbidden || (int)response.StatusCode==429)

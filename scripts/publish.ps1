@@ -10,6 +10,10 @@ dotnet publish (Join-Path $repoRoot 'Source\DeskBridge.csproj') -c Release -r wi
 if ($LASTEXITCODE -ne 0) { throw 'Publishing DeskBridge failed.' }
 $exe = Join-Path $appOutput 'DeskBridge.exe'
 $asset = Join-Path $outputRoot 'DeskBridge-win-x64.exe'
+[xml]$project = Get-Content -LiteralPath (Join-Path $repoRoot 'Source\DeskBridge.csproj')
+$version = [string]$project.Project.PropertyGroup.Version
+$manifest = @{version=$version; tag="v$version"} | ConvertTo-Json -Compress
+[IO.File]::WriteAllText((Join-Path $outputRoot 'DeskBridge-update.json'),$manifest,[Text.UTF8Encoding]::new($false))
 Copy-Item -LiteralPath $exe -Destination $asset -Force
 $hash = (Get-FileHash -LiteralPath $asset -Algorithm SHA256).Hash.ToLowerInvariant()
 [IO.File]::WriteAllText($asset + '.sha256', "$hash  DeskBridge-win-x64.exe`n", [Text.Encoding]::ASCII)

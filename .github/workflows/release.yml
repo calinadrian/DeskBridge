@@ -26,5 +26,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create $env:GITHUB_REF_NAME artifacts/DeskBridge-win-x64.exe artifacts/DeskBridge-win-x64.exe.sha256 artifacts/DeskBridge-Windows-x64.zip --verify-tag --title "DeskBridge $env:GITHUB_REF_NAME" --generate-notes --latest
+          gh release create $env:GITHUB_REF_NAME artifacts/DeskBridge-win-x64.exe artifacts/DeskBridge-win-x64.exe.sha256 artifacts/DeskBridge-Windows-x64.zip artifacts/DeskBridge-update.json --verify-tag --title "DeskBridge $env:GITHUB_REF_NAME" --generate-notes --latest
           if ($LASTEXITCODE -ne 0) { throw 'Release publication failed.' }
