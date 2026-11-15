@@ -12,6 +12,8 @@ $exe = Join-Path $appOutput 'DeskBridge.exe'
 $asset = Join-Path $outputRoot 'DeskBridge-win-x64.exe'
 [xml]$project = Get-Content -LiteralPath (Join-Path $repoRoot 'Source\DeskBridge.csproj')
 $version = [string]$project.Project.PropertyGroup.Version
+$msi = Join-Path $outputRoot 'DeskBridge-Windows-x64.msi'
+& (Join-Path $repoRoot 'installer\Build-Msi.ps1') -Application $exe -Version $version -Output $msi
 $manifest = @{version=$version; tag="v$version"} | ConvertTo-Json -Compress
 [IO.File]::WriteAllText((Join-Path $outputRoot 'DeskBridge-update.json'),$manifest,[Text.UTF8Encoding]::new($false))
 Copy-Item -LiteralPath $exe -Destination $asset -Force

@@ -8,7 +8,9 @@ One keyboard and mouse for your Windows PC and Lenovo Legion Go.
 
 DeskBridge has a Prometheus-inspired dark interface, top navigation, a simpler device-pairing form, and persistent connection status and controls. The monitor arrangement dialog uses the same theme.
 
-To upgrade, use **Settings & updates** or close DeskBridge and replace the existing executable with the one in the release ZIP.
+Install **DeskBridge-Windows-x64.msi** on each device and open **DeskBridge** from the Start menu. Setup installs for the current Windows user and supports removal in **Settings > Apps > Installed apps**. Pairing and preferences stay in your Windows profile. If you previously used the portable app, close it before installing and toggle **Start DeskBridge with Windows** off and back on if you want to migrate its startup entry.
+
+Use **Settings & updates** for app updates. A portable ZIP is also available.
 
 ## Version 0.1.6
 
@@ -20,7 +22,7 @@ Update checks use a public release manifest instead of the GitHub API quota. If 
 
 ## Start on the Legion Go
 
-1. Extract the downloaded ZIP, copy its folder to the Legion Go, and open `DeskBridge.exe`.
+1. Run the installer on the Legion Go, then open **DeskBridge** from the Start menu.
 2. On **Connection**, choose **Receive input**, then **Start receiving**.
 3. If Windows asks about network access, allow it on your **private/home network**.
 4. Keep the app open. It shows this device's address and a private pairing code.
