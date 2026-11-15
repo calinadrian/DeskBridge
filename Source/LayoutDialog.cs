@@ -17,7 +17,9 @@ internal sealed class LayoutDialog : Form
         LayoutValue=layout;
         Text="Arrange monitors"; ClientSize=new Size(860,650); MinimumSize=new Size(780,580);
         StartPosition=FormStartPosition.CenterParent;
-        BackColor=Color.FromArgb(21,26,35); ForeColor=Color.White; Font=new Font("Segoe UI",10);
+        AutoScaleDimensions = new SizeF(96, 96);
+        AutoScaleMode = AutoScaleMode.Dpi;
+        Theme.Apply(this);
         var outer=new TableLayoutPanel { Dock=DockStyle.Fill,Padding=new Padding(20),ColumnCount=1,RowCount=4 };
         outer.RowStyles.Add(new RowStyle(SizeType.AutoSize)); outer.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         outer.RowStyles.Add(new RowStyle(SizeType.AutoSize)); outer.RowStyles.Add(new RowStyle(SizeType.AutoSize)); Controls.Add(outer);
@@ -35,7 +37,7 @@ internal sealed class LayoutDialog : Form
             ?? new MonitorPlacement(i,layout.Monitor,i==layout.RemoteMonitor ? layout.Side : ScreenSide.Right,i==layout.RemoteMonitor ? layout.OffsetPercent : 0)).ToArray();
         canvas.Value=layout with { RemoteScreens=detected,Placements=placements }; canvas.RemoteSize=remoteSize;
         outer.Controls.Add(canvas,0,1);
-        outer.Controls.Add(new Label { Text="Drag each remote monitor independently to an edge of a PC monitor. Green seams allow switching.\nFor your desk: put the Legion Go below this PC and its external monitor on the right.\n"+
+        outer.Controls.Add(new Label { Text="Drag each remote monitor independently to an edge of a PC monitor. Green seams allow switching.\n"+
             (connected ? "Remote monitor numbers follow DeskBridge's detected order. " : "Connect first to detect both remote displays. ")+"Windows display settings still control movement between screens on the same device.",AutoSize=true,MaximumSize=new Size(780,0),Margin=new Padding(0,12,0,12) },0,2);
         var buttons=new FlowLayoutPanel { AutoSize=true,Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft };
         var save=new Button { Text="Save layout",AutoSize=true }; var cancel=new Button { Text="Cancel",AutoSize=true,DialogResult=DialogResult.Cancel };
@@ -69,6 +71,7 @@ internal sealed class LayoutDialog : Form
             }
             LayoutValue=canvas.Value with { RemoteMonitor=canvas.Selected }; DialogResult=DialogResult.OK;
         };
+        Theme.Style(outer, save);
         ReadSelection();
     }
 }
@@ -83,7 +86,7 @@ internal sealed class LayoutCanvas : Control
     readonly List<RectangleF> tiles=new();
     bool dragging;
     PointF grab;
-    public LayoutCanvas() { DoubleBuffered=true;BackColor=Color.FromArgb(29,36,48);Cursor=Cursors.Hand; }
+    public LayoutCanvas() { DoubleBuffered=true;BackColor=Theme.Surface;Cursor=Cursors.Hand; }
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e); e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;
@@ -94,11 +97,11 @@ internal sealed class LayoutCanvas : Control
             originX=(Width-all.Width*scale)/2-all.Left*scale; originY=(Height-all.Height*scale)/2-all.Top*scale;
         }
         RectangleF Map(Rectangle r)=>new(originX+r.X*scale,originY+r.Y*scale,r.Width*scale,r.Height*scale);
-        foreach(var item in Screen.AllScreens.Select((s,i)=>(s,i))) DrawTile(e.Graphics,Map(item.s.Bounds),$"This PC {item.i+1}",Color.FromArgb(62,82,111));
+        foreach(var item in Screen.AllScreens.Select((s,i)=>(s,i))) DrawTile(e.Graphics,Map(item.s.Bounds),$"This PC {item.i+1}",Theme.Border);
         tiles.Clear();
         for(int i=0;i<routes.Length;i++) {
             var tile=Map(routes[i].PortalBounds(RemoteSize)); tiles.Add(tile);
-            DrawTile(e.Graphics,tile,$"Remote {routes[i].RemoteMonitor+1}",i==Selected ? Color.FromArgb(39,117,107) : Color.FromArgb(31,68,65));
+            DrawTile(e.Graphics,tile,$"Remote {routes[i].RemoteMonitor+1}",i==Selected ? Color.FromArgb(128,65,47) : Color.FromArgb(69,51,47));
             var local=routes[i].LocalBounds;
             using var seam=new Pen(Color.FromArgb(128,245,202),4);
             foreach(var span in routes[i].PortalSpans(RemoteSize)) {
@@ -114,7 +117,7 @@ internal sealed class LayoutCanvas : Control
     }
     void DrawTile(Graphics g,RectangleF r,string text,Color color)
     {
-        using var brush=new SolidBrush(color); using var pen=new Pen(Color.LightSteelBlue);
+        using var brush=new SolidBrush(color); using var pen=new Pen(Theme.Muted);
         g.FillRectangle(brush,r); g.DrawRectangle(pen,r.X,r.Y,r.Width,r.Height);
         TextRenderer.DrawText(g,text,Font,Rectangle.Round(r),Color.White,TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter);
     }

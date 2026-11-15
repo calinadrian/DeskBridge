@@ -8,6 +8,6 @@
     <CodePage>65001</CodePage>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>DeskBridge</AssemblyName>
-    <Version>0.1.6</Version>
+    <Version>0.1.7</Version>
   </PropertyGroup>
 </Project>

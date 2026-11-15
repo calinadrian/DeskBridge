@@ -1,8 +1,14 @@
-# DeskBridge · Windows preview 0.1.6
+# DeskBridge · Windows preview 0.1.7
 
 One keyboard and mouse for your Windows PC and Lenovo Legion Go.
 
 [Download the latest Windows release](https://github.com/calinadrian/DeskBridge/releases/latest) · [Source repository](https://github.com/calinadrian/DeskBridge)
+
+## Version 0.1.7
+
+DeskBridge has a Prometheus-inspired dark interface, top navigation, a simpler device-pairing form, and persistent connection status and controls. The monitor arrangement dialog uses the same theme.
+
+To upgrade, use **Settings & updates** or close DeskBridge and replace the existing executable with the one in the release ZIP.
 
 ## Version 0.1.6
 
@@ -15,14 +21,14 @@ Update checks use a public release manifest instead of the GitHub API quota. If 
 ## Start on the Legion Go
 
 1. Extract the downloaded ZIP, copy its folder to the Legion Go, and open `DeskBridge.exe`.
-2. On **Connection**, choose **Receive control on this device**, then **Start receiving**.
+2. On **Connection**, choose **Receive input**, then **Start receiving**.
 3. If Windows asks about network access, allow it on your **private/home network**.
 4. Keep the app open. It shows this device's address and a private pairing code.
 
 ## Connect from the PC
 
 1. Open the same `DeskBridge.exe` on the PC with your keyboard and mouse.
-2. Leave **Share this keyboard and mouse** selected.
+2. Leave **Share input** selected.
 3. Enter the Legion Go's address, then paste its complete pairing code. You can transfer the code in a text file using a USB drive or a shared note you control. It is intentionally long to protect access to the device.
 4. Click **Connect**, then **Arrange monitors…** to match your desk.
 5. Move the pointer away from the screen edge first, then move it to the selected edge to switch devices. Or press **Ctrl + Alt + Space**.

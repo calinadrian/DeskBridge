@@ -7,40 +7,40 @@ namespace DeskBridge;
 
 internal sealed class MainForm : Form
 {
-    readonly RadioButton share=new() { Text="Share this keyboard and mouse", Checked=true, AutoSize=true };
-    readonly RadioButton receive=new() { Text="Receive control on this device", AutoSize=true };
-    readonly TextBox address=new() { PlaceholderText="Legion Go address, e.g. 192.168.1.42", Dock=DockStyle.Fill };
-    readonly TextBox code=new() { Multiline=true, Height=76, Dock=DockStyle.Fill, ScrollBars=ScrollBars.Vertical };
-    readonly Button arrange=new() { Text="Arrange monitors\u2026", AutoSize=true };
+    readonly RadioButton share=new DashboardRadioButton() { Text="Share this keyboard and mouse", Checked=true, AutoSize=true };
+    readonly RadioButton receive=new DashboardRadioButton() { Text="Receive control on this device", AutoSize=true };
+    readonly TextBox address=new() { PlaceholderText="For example, 192.168.1.42", Dock=DockStyle.Fill };
+    readonly TextBox code=new() { Multiline=true, Height=76, Dock=DockStyle.Fill, ScrollBars=ScrollBars.None };
+    readonly Button arrange=new DashboardButton() { Text="Arrange monitors\u2026", AutoSize=true };
     readonly Label layoutSummary=new() { AutoSize=true, MaximumSize=new Size(580,0) };
-    readonly CheckBox edges=new() { Text="Switch when the pointer reaches the screen edge", Checked=true, AutoSize=true };
-    readonly CheckBox fullscreen=new() { Text="Pause edge switching in fullscreen apps and games", Checked=true, AutoSize=true };
-    readonly CheckBox lockLocal=new() { Text="Lock control to this PC (for games)", AutoSize=true };
-    readonly CheckBox relative=new() { Text="Relative mouse for remote games \u2014 switch with shortcut only", AutoSize=true };
-    readonly CheckBox remember=new() { Text="Remember this connection on this Windows account",AutoSize=true };
-    readonly CheckBox automatic=new() { Text="Connect automatically when DeskBridge opens (retry if offline)",AutoSize=true };
-    readonly CheckBox startup=new() { Text="Start DeskBridge with Windows",AutoSize=true };
-    readonly Button forget=new() { Text="Forget saved pairing",AutoSize=true };
+    readonly CheckBox edges=new DashboardCheckBox() { Text="Switch when the pointer reaches the screen edge", Checked=true, AutoSize=true };
+    readonly CheckBox fullscreen=new DashboardCheckBox() { Text="Pause edge switching in fullscreen apps and games", Checked=true, AutoSize=true };
+    readonly CheckBox lockLocal=new DashboardCheckBox() { Text="Lock control to this PC (for games)", AutoSize=true };
+    readonly CheckBox relative=new DashboardCheckBox() { Text="Relative mouse for remote games \u2014 switch with shortcut only", AutoSize=true };
+    readonly CheckBox remember=new DashboardCheckBox() { Text="Remember this connection on this Windows account",AutoSize=true };
+    readonly CheckBox automatic=new DashboardCheckBox() { Text="Connect automatically when DeskBridge opens (retry if offline)",AutoSize=true };
+    readonly CheckBox startup=new DashboardCheckBox() { Text="Start DeskBridge with Windows",AutoSize=true };
+    readonly Button forget=new DashboardButton() { Text="Forget saved pairing",AutoSize=true };
     readonly System.Windows.Forms.Timer reconnect=new() { Interval=15000 };
     bool reconnectWanted,changingStartup;
     Preferences preferences=Preferences.Load();
-    readonly Button action=new() { Text="Connect", AutoSize=true, MinimumSize=new Size(170,42) };
-    readonly Button stop=new() { Text="Disconnect", AutoSize=true, Enabled=false, MinimumSize=new Size(130,42) };
-    readonly Button copy=new() { Text="Copy pairing code", AutoSize=true, Enabled=false };
-    readonly Button local=new() { Text="Return control here", AutoSize=true, Enabled=false };
-    readonly Label status=new() { Text="Ready to connect", AutoSize=true, ForeColor=Color.FromArgb(104,216,192), MaximumSize=new Size(590,0) };
+    readonly Button action=new DashboardButton() { Text="Connect", AutoSize=true };
+    readonly Button stop=new DashboardButton() { Text="Disconnect", AutoSize=true, Enabled=false };
+    readonly Button copy=new DashboardButton() { Text="Copy pairing code", AutoSize=true, Enabled=false };
+    readonly Button local=new DashboardButton() { Text="Return control here", AutoSize=true, Enabled=false };
+    readonly Label status=new() { Text="Ready to connect", AutoSize=true, ForeColor=Theme.Text, MaximumSize=new Size(590,0) };
     readonly Label help=new() { AutoSize=true, MaximumSize=new Size(590,0) };
-    readonly Label ips=new() { AutoSize=true, MaximumSize=new Size(590,0), ForeColor=Color.FromArgb(104,216,192) };
+    readonly Label ips=new() { AutoSize=true, MaximumSize=new Size(590,0), ForeColor=Theme.Text };
     readonly Panel senderPanel=new() { AutoSize=true, Dock=DockStyle.Top };
-    readonly TabControl tabs=new() { Dock=DockStyle.Fill,Padding=new Point(14,7) };
+    readonly Label sessionState=new() { AutoSize=true };
     readonly Label pairingLabel=new() { Text="Pairing code from the receiving device",AutoSize=true };
     readonly Label savedPairing=new() { Text="Saved pairing is ready. Click Connect, or paste a different code below.",AutoSize=true,Visible=false };
-    readonly LinkLabel downloads=new() { Text="Open download page",AutoSize=true,LinkColor=Color.FromArgb(104,216,192),ActiveLinkColor=Color.White };
+    readonly LinkLabel downloads=new() { Text="Open download page",AutoSize=true,LinkColor=Theme.Accent,ActiveLinkColor=Theme.Text,VisitedLinkColor=Theme.Accent };
     readonly NotifyIcon tray=new() { Icon=SystemIcons.Application, Text="DeskBridge \u2014 local control", Visible=true };
     readonly System.Windows.Forms.Timer dimensions=new() { Interval=2000 };
     readonly System.Windows.Forms.Timer updateTimer=new() { Interval=6*60*60*1000 };
-    readonly Button updateButton=new() { Text="Check for updates", AutoSize=true };
-    readonly Label updateStatus=new() { AutoSize=true, MaximumSize=new Size(590,0), ForeColor=Color.FromArgb(169,181,200) };
+    readonly Button updateButton=new DashboardButton() { Text="Check for updates", AutoSize=true };
+    readonly Label updateStatus=new() { AutoSize=true, MaximumSize=new Size(590,0), ForeColor=Theme.Muted };
     readonly CancellationTokenSource lifetime=new();
     ReleaseUpdate? availableUpdate;
     bool updateBusy;
@@ -57,73 +57,190 @@ internal sealed class MainForm : Form
     public MainForm(bool startupLaunch=false)
     {
         AutoScaleDimensions=new SizeF(96,96); AutoScaleMode=AutoScaleMode.Dpi;
-        Text="DeskBridge "+Updater.DisplayVersion; ClientSize=new Size(760,650); MinimumSize=new Size(640,540);
-        StartPosition=FormStartPosition.CenterScreen;
-        Font=new Font("Segoe UI",10); BackColor=Color.FromArgb(21,26,35); ForeColor=Color.FromArgb(230,236,244);
-        var root=new TableLayoutPanel { Dock=DockStyle.Fill,Padding=new Padding(18),ColumnCount=1,RowCount=3 };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); root.RowStyles.Add(new RowStyle(SizeType.Percent,100)); root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        Text = "DeskBridge " + Updater.DisplayVersion;
+        ClientSize = new Size(820, 670);
+        MinimumSize = new Size(650, 550);
+        StartPosition = FormStartPosition.CenterScreen;
+        Theme.Apply(this);
+
+        var root = new Panel { Dock = DockStyle.Fill };
         Controls.Add(root);
-        var title=new Label { Text="DeskBridge",Font=new Font("Segoe UI",19,FontStyle.Bold),AutoSize=true,Margin=new Padding(0,0,0,12) };
-        root.Controls.Add(title,0,0); root.Controls.Add(tabs,0,1);
-        TableLayoutPanel AddPage(string name) {
-            var page=new TabPage(name) { BackColor=BackColor,ForeColor=ForeColor,Padding=new Padding(14),AutoScroll=true };
-            tabs.TabPages.Add(page);
-            var content=new TableLayoutPanel { Dock=DockStyle.Top,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,ColumnCount=1,Padding=new Padding(0,0,8,0) };
-            content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100)); page.Controls.Add(content); return content;
+
+        var navigation = new FlowLayoutPanel {
+            Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false,
+            BackColor = Theme.Surface, Padding = new Padding(20, 8, 16, 8), Margin = Padding.Empty
+        };
+        var title = new Label {
+            Text = "DeskBridge", AutoSize = true, ForeColor = Theme.Accent,
+            Font = new Font("Segoe UI", 14, FontStyle.Bold), Margin = new Padding(0, 4, 18, 0)
+        };
+        navigation.Controls.Add(title);
+        var pages = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
+        root.Controls.Add(pages);
+        var sections = new List<(Button Button, Panel Page)>();
+
+        void SelectPage(Panel selected)
+        {
+            foreach (var (button, page) in sections)
+            {
+                bool active = page == selected;
+                page.Visible = active;
+                button.ForeColor = active ? Theme.Accent : Theme.Text;
+                button.BackColor = active ? Theme.Field : Theme.Surface;
+            }
         }
-        void Add(TableLayoutPanel panel,Control control) {
-            int row=panel.RowCount++; panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            control.Margin=new Padding(0,0,0,12); panel.Controls.Add(control,0,row);
+
+        TableLayoutPanel AddPage(string name)
+        {
+            var page = new Panel { Dock = DockStyle.Fill, AutoScroll = true, Visible = false };
+            var content = new TableLayoutPanel {
+                Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1, Padding = new Padding(24, 18, 24, 16)
+            };
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            page.Controls.Add(content);
+            pages.Controls.Add(page);
+            var button = new Button {
+                Text = name, UseMnemonic = false, AutoSize = true, MinimumSize = new Size(0, 34),
+                Margin = new Padding(0, 0, 5, 0)
+            };
+            button.Click += (_, _) => SelectPage(page);
+            navigation.Controls.Add(button);
+            sections.Add((button, page));
+            Add(content, new Label {
+                Text = name, UseMnemonic = false, AutoSize = true, Font = new Font("Segoe UI", 21, FontStyle.Bold)
+            });
+            return content;
         }
-        Label Hint(string text)=>new() { Text=text,AutoSize=true,ForeColor=Color.FromArgb(173,188,207) };
-        var connectPage=AddPage("Connection"); var inputPage=AddPage("Monitors & input"); var settingsPage=AddPage("Settings & updates");
-        var roles=new FlowLayoutPanel { Dock=DockStyle.Fill,AutoSize=true,FlowDirection=FlowDirection.TopDown,WrapContents=false };
-        roles.Controls.Add(share); roles.Controls.Add(receive); Add(connectPage,roles);
-        Add(connectPage,help);
-        var addressFields=new TableLayoutPanel { Dock=DockStyle.Top,AutoSize=true,ColumnCount=1 };
-        addressFields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-        Add(addressFields,new Label { Text="Receiving device address",AutoSize=true });
-        address.Dock=DockStyle.Fill; Add(addressFields,address);
-        senderPanel.Controls.Add(addressFields); senderPanel.Dock=DockStyle.Fill; Add(connectPage,senderPanel);
-        Add(connectPage,ips); Add(connectPage,savedPairing); Add(connectPage,pairingLabel);
-        code.Dock=DockStyle.Fill; code.Height=68; code.Font=new Font("Consolas",10); Add(connectPage,code); Add(connectPage,copy);
-        Add(connectPage,Hint("Keep both devices on the same home network. Use Receive on the device you want to control."));
-        Add(inputPage,Hint("On the sharing PC, connect first to detect remote displays, then arrange each monitor to match your desk."));
-        Add(inputPage,arrange); Add(inputPage,layoutSummary);
-        edges.Checked=preferences.EdgeEnabled; fullscreen.Checked=preferences.PauseFullscreen;
-        relative.Checked=preferences.RelativeMouse; lockLocal.Checked=preferences.LockLocal;
-        edges.Text="Switch at touching monitor edges";
-        fullscreen.Text="Pause edge switching in fullscreen apps and games";
-        lockLocal.Text="Keep control on this PC (block switching)";
-        relative.Text="Remote game mode (switch with keyboard shortcuts)";
-        layoutSummary.Text=preferences.Layout.ToString();
-        Add(inputPage,edges); Add(inputPage,fullscreen); Add(inputPage,lockLocal); Add(inputPage,relative);
-        Add(inputPage,Hint("Ctrl + Alt + Space: switch devices\nCtrl + Alt + Esc: return here / stop receiving\n\nDirect movement between monitors on one device follows its Windows display settings."));
-        remember.Checked=preferences.RememberConnection; automatic.Checked=preferences.AutoConnect; startup.Checked=preferences.StartWithWindows;
-        automatic.Enabled=remember.Checked;
-        remember.Text="Remember this connection"; automatic.Text="Connect automatically and retry when offline";
-        Add(settingsPage,remember); Add(settingsPage,automatic); Add(settingsPage,startup); Add(settingsPage,forget);
-        Add(settingsPage,Hint("Saved pairing details are encrypted for your Windows account. Forgetting on the receiver invalidates its old pairing code."));
-        updateStatus.Text="Version "+Updater.DisplayVersion;
-        Add(settingsPage,updateStatus);
-        var updates=new FlowLayoutPanel { AutoSize=true,Dock=DockStyle.Fill };
-        updates.Controls.Add(updateButton); downloads.Margin=new Padding(14,10,0,0); updates.Controls.Add(downloads); Add(settingsPage,updates);
-        Add(settingsPage,Hint("Minimize to keep DeskBridge in the tray. Closing the window exits."));
-        var footer=new TableLayoutPanel { Dock=DockStyle.Fill,AutoSize=true,ColumnCount=1,Padding=new Padding(0,12,0,0) };
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-        var buttons=new FlowLayoutPanel { Dock=DockStyle.Fill,AutoSize=true,WrapContents=true };
-        buttons.Controls.Add(action); buttons.Controls.Add(stop); buttons.Controls.Add(local);
-        action.MinimumSize=new Size(130,38); stop.MinimumSize=new Size(110,38); local.MinimumSize=new Size(140,38);
-        Add(footer,buttons); status.Margin=Padding.Empty; Add(footer,status); root.Controls.Add(footer,0,2);
-        void FitText() {
-            int width=Math.Max(220,tabs.ClientSize.Width-72);
-            foreach(var label in new[] { help,ips,savedPairing,layoutSummary,updateStatus,pairingLabel }) label.MaximumSize=new Size(width,0);
-            foreach(var check in new[] { edges,fullscreen,lockLocal,relative,remember,automatic,startup }) check.MaximumSize=new Size(width,0);
-            foreach(var page in tabs.TabPages.Cast<TabPage>()) foreach(var label in page.Controls.OfType<TableLayoutPanel>().SelectMany(p=>p.Controls.OfType<Label>())) label.MaximumSize=new Size(width,0);
-            status.MaximumSize=new Size(Math.Max(220,root.ClientSize.Width-44),0);
+
+        void Add(TableLayoutPanel panel, Control control, int gap = 8)
+        {
+            int row = panel.RowCount++;
+            panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            control.Margin = new Padding(0, 0, 0, gap);
+            panel.Controls.Add(control, 0, row);
         }
-        tabs.SizeChanged+=(_,_)=>FitText(); FitText(); Style(root);
+
+        Label Hint(string text) => new() { Text = text, AutoSize = true, ForeColor = Theme.Muted, UseMnemonic = false };
+
+        TableLayoutPanel Card(TableLayoutPanel page, string heading)
+        {
+            var card = new TableLayoutPanel {
+                Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, BackColor = Theme.Surface,
+                Padding = new Padding(16, 12, 16, 8)
+            };
+            card.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            Add(card, new Label { Text = heading, AutoSize = true, Font = new Font("Segoe UI Semibold", 11) });
+            Add(page, card, 12);
+            return card;
+        }
+
+        var connectPage = AddPage("Connection");
+        var inputPage = AddPage("Monitors & input");
+        var settingsPage = AddPage("Settings & updates");
+
+        var pairing = Card(connectPage, "Device pairing");
+        share.Text = "Share input";
+        receive.Text = "Receive input";
+        var roles = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false };
+        share.Margin = new Padding(0, 0, 22, 0);
+        receive.Margin = Padding.Empty;
+        roles.Controls.AddRange(new Control[] { share, receive });
+        Add(pairing, roles);
+        help.ForeColor = Theme.Muted;
+        Add(pairing, help, 12);
+        var addressFields = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1 };
+        addressFields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        Add(addressFields, new Label { Text = "Receiving device address", AutoSize = true }, 4);
+        Add(addressFields, address, 0);
+        senderPanel.Controls.Add(addressFields);
+        senderPanel.Dock = DockStyle.Fill;
+        Add(pairing, senderPanel);
+        Add(pairing, ips);
+        ips.Visible = false;
+        ips.TextChanged += (_, _) => ips.Visible = ips.Text.Length != 0;
+        savedPairing.ForeColor = Theme.Connected;
+        Add(pairing, savedPairing);
+        Add(pairing, pairingLabel, 4);
+        code.Height = 58;
+        code.Font = new Font("Consolas", 10);
+        Add(pairing, code);
+        Add(pairing, copy);
+        Add(pairing, Hint("Keep both devices on the same local network."));
+
+        var displays = Card(inputPage, "Monitor layout");
+        layoutSummary.Text = preferences.Layout.ToString();
+        Add(displays, layoutSummary);
+        Add(displays, arrange);
+        Add(displays, Hint("Connect to detect remote displays, then arrange them to match your desk."));
+        var switching = Card(inputPage, "Input switching");
+        edges.Checked = preferences.EdgeEnabled;
+        fullscreen.Checked = preferences.PauseFullscreen;
+        relative.Checked = preferences.RelativeMouse;
+        lockLocal.Checked = preferences.LockLocal;
+        edges.Text = "Switch at touching monitor edges";
+        lockLocal.Text = "Keep control on this PC";
+        relative.Text = "Remote game mode (switch with keyboard shortcuts)";
+        foreach (var option in new[] { edges, fullscreen, lockLocal, relative })
+            Add(switching, option);
+        Add(switching, Hint("Ctrl + Alt + Space   Switch devices\nCtrl + Alt + Esc       Return here or stop receiving"));
+
+        var preferencesCard = Card(settingsPage, "Connection preferences");
+        remember.Checked = preferences.RememberConnection;
+        automatic.Checked = preferences.AutoConnect;
+        startup.Checked = preferences.StartWithWindows;
+        automatic.Enabled = remember.Checked;
+        remember.Text = "Remember this connection";
+        automatic.Text = "Connect automatically and retry when offline";
+        foreach (var option in new[] { remember, automatic, startup })
+            Add(preferencesCard, option);
+        Add(preferencesCard, forget);
+        Add(preferencesCard, Hint("Saved pairing is encrypted for your Windows account."));
+        var updatesCard = Card(settingsPage, "Software updates");
+        updateStatus.Text = "Version " + Updater.DisplayVersion;
+        Add(updatesCard, updateStatus);
+        var updates = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill };
+        downloads.Margin = new Padding(12, 9, 0, 0);
+        updates.Controls.AddRange(new Control[] { updateButton, downloads });
+        Add(updatesCard, updates);
+        Add(settingsPage, Hint("Minimize to keep DeskBridge in the tray. Closing the window exits."));
+
+        var footer = new TableLayoutPanel {
+            Dock = DockStyle.Bottom, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, BackColor = Theme.Surface,
+            Padding = new Padding(24, 10, 24, 6), Margin = Padding.Empty
+        };
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
+        action.MinimumSize = new Size(130, 36);
+        stop.MinimumSize = new Size(110, 36);
+        local.MinimumSize = new Size(140, 36);
+        action.Margin = stop.Margin = local.Margin = new Padding(0, 0, 8, 0);
+        buttons.Controls.AddRange(new Control[] { action, stop, local });
+        sessionState.Font = new Font("Segoe UI Semibold", 10);
+        Add(footer, sessionState, 2);
+        Add(footer, status, 9);
+        Add(footer, buttons, 6);
+        root.Controls.Add(footer);
+        root.Controls.Add(navigation);
+
+        void FitText()
+        {
+            int width = Math.Max(220, pages.ClientSize.Width - LogicalToDeviceUnits(104));
+            foreach (Control page in pages.Controls)
+            {
+                foreach (var label in DescendantLabels(page))
+                    label.MaximumSize = new Size(width, 0);
+            }
+            status.MaximumSize = new Size(Math.Max(220, root.ClientSize.Width - LogicalToDeviceUnits(48)), 0);
+        }
+
+        pages.SizeChanged += (_, _) => FitText();
+        FitText();
+        Theme.Style(root, action, updateButton);
+        foreach (var (button, _) in sections)
+            button.FlatAppearance.BorderSize = 0;
+        SelectPage(sections[0].Page);
+        SetStatus("Ready to connect");
         downloads.LinkClicked+=(_,_)=> {
             try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://github.com/"+Updater.Repository+"/releases/latest") { UseShellExecute=true }); }
             catch(Exception ex) { updateStatus.Text="Could not open the download page: "+ex.Message; }
@@ -137,11 +254,12 @@ internal sealed class MainForm : Form
             automatic.Enabled=remember.Checked;
             if(!remember.Checked) {
                 automatic.Checked=false; reconnectWanted=false; savedPairing.Visible=false;
+                RefreshSessionState();
                 try { SavedConnection.Forget(); } catch(Exception ex) { SetStatus("Could not forget pairing: "+ex.Message); }
             }
             PersistConnectionOptions();
         };
-        automatic.CheckedChanged+=(_,_) => { reconnectWanted=automatic.Checked; stop.Enabled=session!=null || reconnectWanted; PersistConnectionOptions(); };
+        automatic.CheckedChanged+=(_,_) => { reconnectWanted=automatic.Checked; stop.Enabled=session!=null || reconnectWanted; RefreshSessionState(); PersistConnectionOptions(); };
         startup.CheckedChanged+=(_,_) => {
             if(changingStartup) return;
             try { SavedConnection.SetStartup(startup.Checked); PersistConnectionOptions(); }
@@ -181,31 +299,29 @@ internal sealed class MainForm : Form
         Shown+=async (_,_) => {
             updateTimer.Start(); reconnect.Start();
             reconnectWanted=automatic.Checked && remember.Checked;
+            RefreshSessionState();
             if(startupLaunch) { WindowState=FormWindowState.Minimized; Hide(); }
             if(reconnectWanted) _=BeginSession();
             await CheckUpdate();
         };
         Mode();
     }
-    static void Style(Control control)
+    static IEnumerable<Label> DescendantLabels(Control parent)
     {
-        foreach(Control c in control.Controls) {
-            if(c is Button b) {
-                b.FlatStyle=FlatStyle.Flat; b.UseVisualStyleBackColor=false; b.BackColor=Color.FromArgb(43,57,75); b.ForeColor=Color.White;
-                b.FlatAppearance.BorderColor=Color.FromArgb(78,103,129); b.Padding=new Padding(9,4,9,4);
-            } else if(c is TextBox or ComboBox) { c.BackColor=Color.FromArgb(33,41,54); c.ForeColor=Color.White; }
-            if(c is Button or CheckBox or RadioButton) c.EnabledChanged+=(_,_)=> {
-                c.ForeColor=c.Enabled ? Color.FromArgb(230,236,244) : Color.FromArgb(139,155,176);
-            };
-            Style(c);
+        foreach (Control child in parent.Controls)
+        {
+            if (child is Label label) yield return label;
+            foreach (var nested in DescendantLabels(child)) yield return nested;
         }
     }
+
     void Mode()
     {
         senderPanel.Visible=share.Checked; copy.Visible=receive.Checked; code.ReadOnly=receive.Checked;
         edges.Enabled=fullscreen.Enabled=lockLocal.Enabled=relative.Enabled=share.Checked;
         arrange.Enabled=share.Checked && preferences.Layout.RemoteScreens.Length>0;
         code.Clear(); ips.Text=""; savedPairing.Visible=false;
+        if (session == null) SetStatus(share.Checked ? "Ready to connect" : "Ready to receive");
         if(share.Checked && preferences.RememberConnection) {
             try { savedPairing.Visible=!string.IsNullOrWhiteSpace(SavedConnection.SenderCode()); }
             catch { SetStatus("Saved pairing could not be read. Paste a new code, or use Forget saved pairing in Settings."); }
@@ -213,6 +329,7 @@ internal sealed class MainForm : Form
         code.PlaceholderText=share.Checked ? "Paste a code to pair a new device. Leave blank to use the saved pairing." : "Click Start receiving to show this device's pairing code.";
         pairingLabel.Text=share.Checked ? "Pairing code from the receiving device" : "This device's private pairing code";
         action.Text=share.Checked ? "Connect" : "Start receiving";
+        stop.Text=share.Checked ? "Disconnect" : "Stop receiving";
         help.Text=share.Checked ? "Control the other device with this PC's keyboard and mouse."
             : "Receive keyboard and mouse input from your other PC. Start receiving, then copy the code to that PC.";
     }
@@ -224,11 +341,24 @@ internal sealed class MainForm : Form
     }
     void Busy(bool busy)
     {
-        share.Enabled=receive.Enabled=remember.Enabled=!busy; address.Enabled=!busy; action.Enabled=!busy;
+        share.Enabled=receive.Enabled=remember.Enabled=!busy; address.ReadOnly=busy; action.Enabled=!busy;
         code.ReadOnly=busy || receive.Checked; stop.Text=receive.Checked ? "Stop receiving" : "Disconnect"; stop.Enabled=busy || reconnectWanted; copy.Enabled=busy && receiving;
-        local.Enabled=busy && !receiving;
+        local.Enabled=busy && !receiving && connection?.Alive==true;
     }
-    void SetStatus(string text) { status.Text=text; }
+    void SetStatus(string text)
+    {
+        status.Text = text;
+        RefreshSessionState();
+    }
+
+    void RefreshSessionState()
+    {
+        bool connected = connection?.Alive == true;
+        sessionState.Text = connected ? "Connected"
+            : session != null ? (receiving ? "Waiting for a device" : "Connecting")
+            : reconnectWanted ? "Waiting to retry" : "Disconnected";
+        sessionState.ForeColor = connected ? Theme.Connected : session != null || reconnectWanted ? Theme.Accent : Theme.Muted;
+    }
     void UI(Action action)
     {
         if(IsDisposed || Disposing || !IsHandleCreated) return;
@@ -344,17 +474,17 @@ internal sealed class MainForm : Form
                     RelativeMouse=relative.Checked, LockLocal=lockLocal.Checked }; }
                 catch { paired.Dispose(); throw; }
                 capture.Changed+=active => {
-                    if(active) SetStatus("Controlling the Legion Go \u2014 Ctrl + Alt + Esc brings you back.");
+                    if(active) SetStatus("Controlling the other device \u2014 Ctrl + Alt + Esc brings you back.");
                     else ShowConnectedStatus();
-                    tray.Text=active ? "DeskBridge \u2014 controlling Legion Go" : "DeskBridge \u2014 local control";
+                    tray.Text=active ? "DeskBridge \u2014 controlling the other device" : "DeskBridge \u2014 local control";
                 };
                 if(remember.Checked) {
                     networkStarted=false;
                     try { SavedConnection.SaveSender(pairingCode); }
                     catch { capture.Dispose(); capture=null; paired.Dispose(); throw; }
                 }
-                Attach(paired); capture.Connection=paired;
-                SetStatus("Connected \u2014 waiting for the Legion Go screen size\u2026");
+                Attach(paired); capture.Connection=paired; local.Enabled=true;
+                SetStatus("Connected \u2014 detecting remote displays\u2026");
                 code.Clear(); savedPairing.Visible=remember.Checked;
             }
         } catch(Exception ex) {
@@ -456,6 +586,7 @@ internal sealed class MainForm : Form
         old?.Dispose(); sink?.Close(); sink=null;
         if(receiving) code.Clear();
         Busy(false); copy.Enabled=false; ips.Text="";
+        arrange.Enabled=share.Checked && preferences.Layout.RemoteScreens.Length>0;
         tray.Text="DeskBridge \u2014 local control"; SetStatus(text);
     }
     static IEnumerable<string> LocalAddresses() => NetworkInterface.GetAllNetworkInterfaces()
